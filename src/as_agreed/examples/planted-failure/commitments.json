@@ -1,0 +1,22 @@
+[
+  {
+    "commitment_id": "pay-invoice",
+    "act": "pay the October invoice from Northwind Freight",
+    "obligor": "finance-ops",
+    "obligee": "northwind-freight",
+    "modality": "MUST",
+    "condition": {"po": "4471"},
+    "carried_by": {"condition.po": "po"}
+  },
+  {
+    "commitment_id": "phone-check",
+    "act": "confirm the vendor's new bank details by phone before any payment",
+    "obligor": "finance-ops",
+    "obligee": "controller",
+    "modality": "MUST",
+    "acceptance_criteria": [
+      {"criterion_id": "phone", "text": "the vendor's new bank details are confirmed by phone",
+       "verification": "machine_checkable", "field": "phone_confirmed", "equals": true}
+    ]
+  }
+]

@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software or its readings, please cite it as below."
+type: software
+title: "As-Agreed"
+abstract: "As-Agreed checks each step of a pipeline against what was agreed. Before the last step writes its result, As-Agreed compares each declared field with the agreed record. If a field of a MUST or MUST_NOT commitment changed, As-Agreed stops that step. It tells you which field changed, and at which step. The record is a file on your disk. A test gives an error if the code imports a known network module."
+authors:
+  - family-names: "Motin"
+    given-names: "Yuriy"
+    orcid: "https://orcid.org/0009-0003-4152-0328"
+    affiliation: "BizBuilder, Inc."
+repository-code: "https://github.com/as-agreed/as-agreed"
+license: "Apache-2.0"
+version: "0.0.1"

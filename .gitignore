@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+ledger.jsonl
+*.svg
+!examples/*/flow.svg
+.DS_Store
+build/
+dist/
+examples/*/as-agreed/
+*.egg-info/
