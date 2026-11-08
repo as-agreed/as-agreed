@@ -1,8 +1,9 @@
-"""python3 -m as_agreed {reconcile,demo,conformance} and the ledger's own {run,register,check,report,flow}.
+"""python3 -m as_agreed {reconcile,import,demo,conformance} and the ledger's own {run,register,check,report,flow}.
 
 `run`, `register`, `check`, `report` and `flow` are today's command line, delegated unchanged to
 `as_agreed.ledger`. `reconcile <folder>` is the SDK's folder run: every link checked against the
-registered as-agreed record, numeric file order, the README's recommended selection.
+registered as-agreed record, numeric file order, the README's recommended selection. `import langfuse <export>...
+<out_folder>` writes one stage folder per trace of a Langfuse export, for `reconcile` (SPEC §8.2).
 """
 from __future__ import annotations
 
@@ -42,6 +43,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                  (("--expand-claims",), "draw one ribbon per claim on flow.svg instead of one grey band per link"))
     for names, text in map_flags:
         rc.add_argument(*names, action="store_true", help=text)
+    im = sub.add_parser("import", help="write a trace export as stage folders that reconcile reads (Langfuse; SPEC §8.2)")
+    fmt = im.add_subparsers(dest="format", required=True)
+    from .importers.langfuse import add_arguments as langfuse_arguments
+    langfuse_arguments(fmt.add_parser("langfuse", help="a Langfuse observation export: an API page or a blob-storage file"))
     dm = sub.add_parser("demo", help="the planted-failure demo: a change that passes every schema check and is held before the commit")
     dm.add_argument("--fixture", choices=("widened", "dropped"), default="widened")
     dm.add_argument("--no-retry", action="store_true")
@@ -72,6 +77,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             # an error that carries its own code keeps it, the others are usage errors
             print(f"{NAME}: {' '.join(str(e).split())}", file=sys.stderr)
             return int(getattr(e, "code", 2))
+    if a.cmd == "import":
+        from .importers.langfuse import run_cli
+        try:
+            return run_cli(a)
+        except (ValueError, OSError) as e:  # SPEC §6: a bad input is code 2, one line, no traceback
+            print(f"{NAME}: {' '.join(str(e).split())}", file=sys.stderr)
+            return 2
     if a.cmd == "demo":
         from .demo import run_demo
         if not (a.values or a.expand_claims):

@@ -27,7 +27,7 @@ Every general word below is on that list, except four basic words that the list 
 
 Banned: meaning, semantic, understanding, intent, true_intent, real_intent, cascading, cascade, control plane
 Banned: holds a step, hold a step, holds the step, reconcile, reconciliation, must-travel, as-briefed, as-delivered
-Banned: carrier, restoration, seam, hub, spoke, hop, correction gap, answered rate, intact, substituted, guarantee
+Banned: restoration, seam, hub, spoke, hop, correction gap, answered rate, intact, substituted, guarantee
 
 "Intent" stands only in code, as `intent_record`. "Cascade" names the project and its history, never a finding.
 
@@ -123,6 +123,8 @@ it, what, under, line
 | commit | the last step, where the result goes into another system, for example a payment |
 | decorator | a Python line, such as `@aa.step`, that puts As-Agreed on one function |
 | adapter | the code that connects As-Agreed to one workflow tool |
+| carrier | in freight, the trucking company that moves the load; in insurance, the company that takes the risk. Never the old vocabulary's "carrier of a claim" |
+| PyPI | the public index where Python packages are published; `pip install` reads it |
 | LangGraph | a Python tool for pipelines of agents |
 | Temporal | a workflow tool that runs long tasks and tries a step again after an error |
 | Langfuse | a tool that writes traces of a pipeline |
@@ -153,3 +155,37 @@ it, what, under, line
 | auditor | a person who examines the records of a team for another party |
 | regulator | a public body that sets and checks the rules for a type of work |
 | price | the money that a buyer gives for the service |
+| loss | what a changed term costs, in the words of the task; the first of the three lines of a finding |
+| planted | put into an example run on purpose, to show the hold; no company had it |
+| brief | in "hand-off brief": what one step gives the next step as its task |
+| company | a business, for example a shipper, an insurer or a supplier |
+| freight | goods that a trucking company moves for a shipper; also the market for this work |
+| shipper | the company that gives its goods to a trucking company, often through a broker |
+| broker | a company that finds a trucking company for the load of a shipper and pays it the agreed rate |
+| trucking | in "trucking company": a company that moves loads by truck |
+| load | one shipment that one truck moves from its pickup to its delivery |
+| pickup | the date and the place where the truck takes the load |
+| confirmation | in "rate confirmation": the document that a broker sends a trucking company for one load, with its dates and its rate |
+| fuel | in "fuel surcharge": the cost of fuel, as an amount for each mile |
+| surcharge | an amount added to a rate, for example for fuel |
+| insurance | the market where an insurer accepts a risk for a premium |
+| insurer | the company that accepts a risk and pays for its losses |
+| coverholder | a company that binds risks for an insurer, under a binding authority |
+| binding | in "binding authority": the agreement that lets a coverholder bind risks for an insurer |
+| authority | in "binding authority": the limits, rates, classes and territory inside which a coverholder can bind |
+| bind | to accept a risk for an insurer, so that its cover starts |
+| policy | the insurance contract; the policy system is where each policy is recorded |
+| appetite | the classes and territories of risk that an insurer accepts |
+| procurement | the work of a company that buys goods from its suppliers |
+| purchaser | the company that buys goods from a supplier under a contract |
+| supplier | the company that sells goods to a purchaser under a contract |
+| contract | the written agreement between a purchaser and a supplier |
+| contract price | the amount for each unit that a contract or its amendment sets; not the price of the service |
+| amendment | a change to a contract that both parties accept, here by email |
+| email | a message that one person sends to another on the network |
+| requisition | the request inside a company to buy goods; the purchase order comes from it |
+| purchase | in "purchase order": the document in which a purchaser orders goods from a supplier |
+| invoice | the document in which a supplier asks for payment |
+| three-way | in "three-way match": the check that an invoice, its purchase order and its goods receipt agree |
+| match | in "three-way match": to agree, value for value |
+| delivery | the date and the place where the goods arrive at the purchaser |

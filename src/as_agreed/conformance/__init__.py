@@ -8,8 +8,8 @@ A third-party adapter runs the suite from its own code: `run_suite(my_factory)` 
 `my_factory(run_id=None, pipeline=None) -> Adapter`. No module is loaded by name here, so the
 repository's no-network test keeps its word for this file too.
 
-Sentences marked for one adapter run there only and are skipped by name elsewhere; the import sentences
-I3 to I5 are deferred with the importers (the P6 test of 2026-11-02) and skipped by name until then.
+Sentences marked for one adapter run there only and are skipped by name elsewhere; I3 runs on the Langfuse importer
+(0.0.2, 2026-11-07), and I4 and I5 are deferred with the LangSmith and OTLP importers (v0.2) and skipped by name.
 The socket guard of K13 is supplied by the caller (the tests pass one); the suite itself opens nothing.
 The Temporal suite runs inside an activity, from `tests/test_adapter_temporal.py`: the engine parts of A4, A6 and
 T5 need workflow code, which that module runs on the test server and hands in as `engine=` (what it observed);
@@ -79,9 +79,8 @@ class Result:
 
 
 SENTENCES: Dict[str, Tuple[Callable, Any]] = {}
-DEFERRED = {"I3": "deferred with the Langfuse importer (P6, 2026-11-02)",
-            "I4": "deferred with the LangSmith importer (P6, 2026-11-02)",
-            "I5": "deferred with the OTLP importer (P6, 2026-11-02)"}
+DEFERRED = {"I4": "deferred with the LangSmith importer (v0.2, D-26)",
+            "I5": "deferred with the OTLP importer (v0.2, D-26)"}
 
 
 def sentence(sid: str, adapter: Any = None) -> Callable:
@@ -1926,7 +1925,66 @@ def i2(env: Env) -> str:
 
 @sentence("I3")
 def i3(env: Env) -> str:
-    raise AssertionError("deferred")
+    from ..importers import langfuse
+    t = "2030-01-01T10:00:0{}.000Z"
+
+    def obs(oid: str, parent: Optional[str], name: str, sec: int, output: Any, agent: Optional[str] = None,
+            **extra: Any) -> Dict[str, Any]:
+        o = {"id": oid, "traceId": "f00d" * 8, "parentObservationId": parent, "type": "SPAN", "name": name,
+             "startTime": t.format(sec), "endTime": t.format(sec + 1), "input": None,
+             "output": None if output is None else json.dumps(output),
+             "metadata": {"attributes": json.dumps({"gen_ai.agent.name": agent})} if agent else {}}
+        o.update(extra)
+        return o
+
+    rows = [obs("r", None, "pipeline", 0, None, input=json.dumps(PLAIN_ORDER)),
+            obs("a", "r", "research", 1, RESEARCH, agent="researcher"),
+            obs("c", "a", "lookup", 2, {"po": "4471"}),
+            obs("b", "r", "commit", 3, {"amount": 19800.0, "po": "4471"}, agent="payer")]
+    folder = tmpdir()
+    export = os.path.join(folder, "page.json")
+    with open(export, "w", encoding="utf-8") as f:
+        json.dump({"data": rows[::-1], "meta": {}}, f)
+    traces, _ = langfuse.read_exports([export])
+    meta, links = langfuse.read_trace(next(iter(traces.values())), langfuse.Scrub(True))
+    assert [(l["phase"], l["parent"]) for l in links[1:]] == [("research", 0), ("lookup", 1), ("commit", 0)], links
+    assert links[1]["text"] == RESEARCH and links[3]["text"] == "amount: 19800.0\npo: 4471", links
+    assert meta["handoffs"] == [{"at_link": 3, "from_agent": "researcher", "to_agent": "payer", "via": None,
+                                 "to_observation_id": "b"}], meta["handoffs"]
+    with open(export, "w", encoding="utf-8") as f:
+        json.dump({"data": [rows[0], dict(rows[1], id=None)]}, f)
+    try:
+        langfuse.read_exports([export])
+        raise AssertionError("an observation with no id was read")
+    except ValueError as e:
+        assert "`id`" in str(e), str(e)
+    core_only = [{k: v for k, v in o.items() if k not in ("input", "output")} for o in rows]
+    with open(export, "w", encoding="utf-8") as f:
+        json.dump({"data": core_only}, f)
+    try:
+        langfuse.convert([export], os.path.join(folder, "empty"))
+        raise AssertionError("a page with no input and no output was written as empty links")
+    except ValueError as e:
+        assert "`output`" in str(e) and "fields=core,basic,io" in str(e), str(e)
+    assert not os.path.exists(os.path.join(folder, "empty")), "a refused export left a folder"
+    with open(export, "w", encoding="utf-8") as f:
+        json.dump({"data": rows}, f)
+    order = os.path.join(folder, "order", "order.md")
+    os.makedirs(os.path.dirname(order))
+    with open(order, "w", encoding="utf-8") as f:
+        f.write(PLAIN_ORDER)
+    with open(os.path.join(folder, "order", "commitments.json"), "w", encoding="utf-8") as f:
+        json.dump([{"commitment_id": "pay-invoice", "act": PAY, "obligor": "finance-ops", "obligee": "northwind-freight",
+                    "modality": "MUST", "limit": {"amount": {"max": 18400, "unit": "USD"}},
+                    "carried_by": {"limit.amount": "amount"}}], f)
+    (name, _), = langfuse.convert([export], os.path.join(folder, "stages"), commitment=order)
+    ad = env.adapter()
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        code = run_folder(os.path.join(folder, "stages", name), adapter=ad, out_dir=tmpdir())
+    ids = [r["id"] for r in ad.records() if r.get("kind") == "link"]
+    assert ids == ["order#1@1", "researcher-research#1@1", "researcher-lookup#1@1", "payer-commit#1@1"], ids
+    assert code == 1 and label_of(ad, "payer-commit#1@1", "pay-invoice", "limit.amount") == "WIDENED", code
+    return "observations to links with parents and text; a missing id and a missing io group named; reconcile holds the commit"
 
 
 @sentence("I4")

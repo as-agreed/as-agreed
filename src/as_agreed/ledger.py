@@ -26,6 +26,12 @@ thirds for a claim marked must-travel) or a 60-character shared substring. It mi
 and translation, and a different line that shares enough words can pass for the claim; tag a
 claim with [c:<id>] where that matters. Both limits come from the study this tool was built for;
 see README.
+
+The file checked last (the one `check` names, the last stage of `run`) is also read sentence by sentence, whatever
+came before it: an absence ("have not", "there is no", "not found") with no date in its sentence is DANGER `undated absence`, and "the only", "the largest",
+"the biggest", "the first to", "nobody has" or "no one has" with no dated source in brackets and no footnote marker is
+DANGER `unsourced superlative`. Both fail the gate under --fail-on danger. A sentence already held as hardened or
+inverted keeps its one DANGER line; the other finding is printed under it as "also".
 """
 
 from __future__ import annotations
@@ -207,9 +213,9 @@ def mark_warnings(text: str, min_words: int) -> List[Tuple[int, str]]:
         late = sum(1 for m in MUST.finditer(ln) if not ln[:m.start()].rstrip() or ln[:m.start()].rstrip()[-1] in ".!?;:…")
         if late:
             out.append((n, "the mark follows the sentence's final punctuation; put it just before"))
-        kept = sum(1 for s in sentences(ln) if MUST.search(s) and not MUST.match(s) and len(content_words(s)) >= min_words)
+        kept = sum(1 for s in sentences(ln) if MUST.search(s) and not MUST.match(s) and content_words(s))
         if len(MUST.findall(ln)) - late > kept:
-            out.append((n, f"the sentence has too few content words to be a claim (--min-words {min_words})"))
+            out.append((n, "the sentence has no content word to be a claim"))
     return out
 
 
@@ -223,7 +229,8 @@ def register(path: str, stage: str, ledger: str, min_words: int, quiet: bool = F
     seen = set()
     for s in sentences(text):
         cw = content_words(s)
-        if len(cw) < min_words:
+        marked = bool(MUST.search(s)) and not MUST.match(s)
+        if len(cw) < (1 if marked else min_words):  # a marked sentence is a claim whatever its length (D-66)
             continue
         tag = TAG.search(s)
         cid = tag.group(1) if tag else claim_id(s)
@@ -264,6 +271,8 @@ def find(claim: str, cid: str, lines: List[str], text: str, must: bool = False) 
             return "words", best.strip()[:300]
     norm_claim = normalise(claim)
     norm_text = normalise(text)
+    if 0 < len(norm_claim) < 60 and re.search(rf"\b{re.escape(norm_claim)}\b", norm_text):  # a short claim, whole
+        return "substring", norm_claim
     for k in range(0, max(0, len(norm_claim) - 60) + 1, 10):
         piece = norm_claim[k:k + 60]
         if len(piece) == 60 and piece in norm_text:
@@ -330,6 +339,98 @@ def dangerous(f: Dict[str, str]) -> bool:
 MUST = re.compile(r"\[(?:!|must)\]", re.I)
 
 
+# ---------- sentences that fail on their own (an absence with no date, a superlative with no dated source) ----------
+_MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|"
+          r"oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|январ\w*|феврал\w*|март\w*|апрел\w*|ма[йя]|июн\w*|июл\w*|"
+          r"август\w*|сентябр\w*|октябр\w*|ноябр\w*|декабр\w*)")
+_YEAR = r"(?:19|20)\d{2}"
+DATE = re.compile(  # an ISO date (or year and month), a numeric date, a month and year, an "as of" date
+    rf"\b{_YEAR}-(?:0[1-9]|1[0-2])(?:-\d{{2}})?\b|\b\d{{1,2}}[./]\d{{1,2}}[./]{_YEAR}\b"
+    rf"|\b{_MONTH}\b\.?,?\s+(?:\d{{1,2}}(?:st|nd|rd|th)?,?\s+)?{_YEAR}\b"
+    rf"|\bas of\s+(?:the\s+)?(?:\d|{_MONTH}\b)|по состоянию на\s+(?:\d|{_MONTH})", re.I)
+# its own list, apart from the register's NOT_FOUND: a letter says "I have not run", not "not found"; the fix is a date
+# "never" is left out (D-66): "we never sell your data" is a promise, and promises are promise_check's job
+ABSENCE = re.compile(r"\b(?:have\s+not|haven[\'\u2019]t|has\s+not|hasn[\'\u2019]t|there\s+(?:is|are)\s+no|no\s+one\s+has|"
+                     r"nobody\s+has|(?:did|could)\s+not\s+find|(?:didn|couldn)[\'\u2019]t\s+find|not\s+found|"
+                     r"no\s+(?:data|records?|evidence|mentions?))\b"
+                     r"|не\s+найден\w*|не\s+наш[её]л\w*|нет\s+данных|не\s+обнаружен\w*|отсутству\w*", re.I)
+# a superlative about the world; "the first" and "the one" alone are ordinals ("the first team"), "the first to" is not
+SUPERLATIVE = re.compile(r"\bthe\s+(?:only|largest|biggest)(?![-\w])|\bthe\s+first\s+to\b|\b(?:nobody|no\s+one)\s+has\b",
+                         re.I)
+FOOTNOTE = re.compile(r"\[\^[^\]\s]+\]|\[\d{1,3}\]|[¹²³⁴⁵⁶⁷⁸⁹⁰]")
+BRACKETED = re.compile(r"\[[^\]]*\]|\([^)]*\)")
+CODE_SPAN = re.compile(r"`[^`]*`")
+OWN_FIX = {"undated absence": 'write when it was true in the sentence, for example "as of YYYY-MM-DD"',
+           "unsourced superlative": 'put its source and date in brackets, for example "[source, YYYY-MM-DD]", '
+                                    'or a footnote marker; or cut the superlative'}
+
+
+def own_sentences(text: str) -> List[str]:
+    """Sentences as a reader meets them: a paragraph's lines joined, cut only at . ! ? (a date before a colon stays in
+    its sentence), a bracket after the full stop kept with the sentence before it. Headings, table rules and code
+    blocks are left out."""
+    blocks: List[str] = []
+    cur: List[str] = []
+    fenced = False
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s.startswith("```"):
+            fenced, s = not fenced, ""
+        if fenced or not s or s.startswith("#") or re.match(r"^\|?\s*:?-{3,}", s):
+            if cur:
+                blocks.append(" ".join(cur))
+                cur = []
+            continue
+        if cur and re.match(r"^(?:[-*+•>|]|\d+[.)])\s", s):  # a list item, a quote or a table row starts anew
+            blocks.append(" ".join(cur))
+            cur = []
+        cur.append(s)
+    if cur:
+        blocks.append(" ".join(cur))
+    out = []
+    for b in blocks:
+        for p in re.split(r"(?:(?<=[.!?])|(?<=[.!?][\"'\u201d\u2019)\]]))\s+(?![\s\[(])", b):
+            p = re.sub(r"\s+", " ", p.strip(" -*•\t#>|"))
+            if len(p) > 15:
+                out.append(p)
+    return out
+
+
+def own_dangers(text: str) -> List[Tuple[str, str]]:
+    """Sentences of the outgoing file that fail whatever came before them (MISTAKES M02, M03): (kind, sentence).
+    An absence ("have not", "there is no", "not found") with no date in its sentence goes stale unseen; a
+    superlative about the world ("the only", "the first to", "nobody has") is true of one pool at one time unless a
+    dated source in brackets or a footnote marker says which."""
+    out: List[Tuple[str, str]] = []
+    seen = set()
+    for s in own_sentences(text):
+        words = CODE_SPAN.sub(" ", s)  # a phrase in code font is code, not a claim
+        found = []
+        if ABSENCE.search(words) and not DATE.search(s):
+            found.append("undated absence")
+        if SUPERLATIVE.search(words) and not FOOTNOTE.search(s) and not any(DATE.search(b) for b in BRACKETED.findall(s)):
+            found.append("unsourced superlative")
+        for kind in found:
+            if (kind, s) not in seen:
+                seen.add((kind, s))
+                out.append((kind, s))
+    return out
+
+
+def print_own(dangers: List[Tuple[str, str]], also: List[Tuple[str, str]] = ()) -> None:
+    """One line for each: the sentence and its fix. `also`: findings on a sentence that already has a DANGER line."""
+    for kind, s in dangers:
+        print(f"  {'DANGER':<8} {claim_id(s)}  [{kind}]  {s}  fix: {OWN_FIX[kind]}")
+    for kind, s in also:
+        print(f"  {'also':<8} {claim_id(s)}  [{kind}]  {s}  fix: {OWN_FIX[kind]}")
+
+
+def own_summary(dangers: List[Tuple[str, str]], path: str) -> str:
+    c = Counter(kind for kind, _ in dangers)
+    return (f"{len(dangers)} sentence(s) of {os.path.basename(path)} fail on their own: "
+            f"{c['undated absence']} undated absence, {c['unsourced superlative']} unsourced superlative.")
+
+
 def selected(c: dict, only: List[str]) -> bool:
     """Which upstream claims must travel. 'all' (default), or any of: hedged, not_found, sourced, dated, must."""
     if not only or "all" in only:
@@ -346,7 +447,9 @@ def selected(c: dict, only: List[str]) -> bool:
     return any(tests.get(k, False) for k in only)
 
 
-def check(path: str, stage: str, against: List[str], ledger: str, fail_on: List[str], min_words: int, only: List[str]) -> int:
+def check(path: str, stage: str, against: List[str], ledger: str, fail_on: List[str], min_words: int, only: List[str],
+          own: bool = True) -> int:
+    """Check the file against the upstream claims; with `own`, also read its sentences on their own (own_dangers)."""
     rows = load(ledger)
     upstream: List[dict] = []
     by_id: Dict[str, dict] = {}
@@ -357,12 +460,22 @@ def check(path: str, stage: str, against: List[str], ledger: str, fail_on: List[
             else:
                 by_id[r["claim_id"]] = r
                 upstream.append(r)
+    text = open(path, encoding="utf-8").read()
+    own_found = own_dangers(text) if own else []
     if not upstream:
         print(f"no claims registered at stage(s) {against} matching --only {only}; run register first", file=sys.stderr)
-        return 2
+        if not (own_found and "danger" in fail_on):
+            return 2
+        # nothing upstream is selected, but a sentence that fails on its own must not pass for "nothing to check"
+        register(path, stage, ledger, min_words, quiet=True)
+        print(f"check {os.path.basename(path)} (stage '{stage}'): no upstream claim under --only {','.join(only)}; "
+              f"its own sentences\n")
+        print_own(own_found)
+        print("\n" + own_summary(own_found, path))
+        print(f"gate: FAIL ({len(own_found)} claims; fail-on = {','.join(fail_on)})")
+        return 1
     # the outgoing artifact is itself registered at its stage, so later steps can be checked against it
     register(path, stage, ledger, min_words, quiet=True)
-    text = open(path, encoding="utf-8").read()
     lines = [ln for ln in text.splitlines() if ln.strip()]
     hops = []
     n_preserved = n_changed = n_dropped = n_danger = n_dropped_must = 0
@@ -386,12 +499,19 @@ def check(path: str, stage: str, against: List[str], ledger: str, fail_on: List[
                      "to_file": os.path.basename(path), "present": present, "match": kind, "span": span,
                      "origin": origin_class(c["markers"]), "fate": f, "ts": now()})
     append(ledger, hops)
+    held = [normalise(h["span"]) for h in hops if h["present"] and h["span"] and dangerous(h["fate"])]
+    also = [(k, s) for k, s in own_found if any(x and (x in normalise(s) or normalise(s) in x) for x in held)]
+    own_found = [d for d in own_found if d not in also]
+    print_own(own_found, also)
     n = len(upstream)
     print(f"\n{n} upstream claims: {n_preserved} present with status preserved, {n_changed} present with status changed "
           f"({n_danger} hardened or inverted), {n_dropped} dropped ({n_dropped_must} of them marked must-travel).")
+    if own_found or also:
+        print(own_summary(own_found, path) + (f" Also on a sentence held above: {len(also)}." if also else ""))
     bad = ((n_dropped if "dropped" in fail_on else 0) + (n_danger if "danger" in fail_on else 0)
            + ((n_changed - (n_danger if "danger" in fail_on else 0)) if "changed" in fail_on else 0)
-           + (n_dropped_must if "dropped_must" in fail_on and "dropped" not in fail_on else 0))
+           + (n_dropped_must if "dropped_must" in fail_on and "dropped" not in fail_on else 0)
+           + (len(own_found) if "danger" in fail_on else 0))
     if bad:
         print(f"gate: FAIL ({bad} claims; fail-on = {','.join(fail_on)})")
         return 1
@@ -507,7 +627,7 @@ def run(folder: str, only: List[str], fail_on: List[str], min_words: int, agains
         else:
             against = stages_done if against_all else [stages_done[-1]]
             print()
-            rc = check(path, st, against, ledger, fail_on, min_words, only)
+            rc = check(path, st, against, ledger, fail_on, min_words, only, own=i == len(files) - 1)
             if rc == 2:  # nothing selected at this hop: its own claims still count for the next ones
                 print(f"nothing to check at stage '{st}' under --only {','.join(only)}")
                 register(path, st, ledger, min_words, quiet=True)

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "as-agreed"
-version = "0.0.1"
+version = "0.0.2"
 description = "Checks each step of a pipeline against what was agreed, and stops the last step if a declared field changed."
 readme = "README.md"
 requires-python = ">=3.9"

@@ -80,9 +80,15 @@ class Marks(unittest.TestCase):
         self.assertIn("must-travel mark not registered", r.stderr)
         self.assertIn("marks: 1 must-travel mark(s) not registered", r.stdout)
 
-    def test_a_mark_on_a_short_sentence_warns(self):
-        r = gate({"01-a.md": FLAT + "Pay now, please [!].\n", "02-b.md": FLAT}, *RECOMMENDED[:4])
-        self.assertIn("min-words", r.stderr)
+    def test_a_mark_on_a_short_sentence_registers_and_travels(self):
+        """D-66: a marked sentence is a claim whatever its length; a headline with two content words was skipped."""
+        short = "What you agreed is what arrives [!].\n"
+        r = gate({"01-a.md": FLAT + short, "02-b.md": FLAT}, *RECOMMENDED[:4])
+        self.assertNotIn("not registered", r.stderr + r.stdout)
+        self.assertIn("DROPPED!", r.stdout)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        r = gate({"01-a.md": FLAT + short, "02-b.md": FLAT + "**What you agreed is what arrives.**\n"}, *RECOMMENDED[:4])
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_a_mark_after_a_full_stop_does_not_mark_the_next_sentence(self):
         r = gate({"01-a.md": "Pay the vendor on Friday. [!] The invoice total is 18,400 dollars per the PDF.\n",
@@ -274,6 +280,69 @@ class NoCommitmentDeclared(unittest.TestCase):
         code, out, err = self.reconcile(undeclared)
         self.assertEqual(code, 1, out + err)
         self.assertNotIn("no commitment was declared", err)
+
+
+class OwnSentences(unittest.TestCase):
+    """(h) The gate compared each claim with the stage before and never read a sentence on its own, so "I have not run
+    anything on your data" went out with no date and went stale (MISTAKES M02), and "the only public release" went out
+    from one pool (M03). The last stage is now read sentence by sentence."""
+
+    ABSENCE = "I have not run anything on your data"  # M02's own sentence
+    SUPERLATIVE = "This is the only public release of the corpus"
+
+    def last(self, sentence, first=HEDGED):
+        """The project's own gate command over two stages; the sentence is in the last one."""
+        return gate({"01-a.md": first, "02-b.md": first + sentence + "\n"}, *RECOMMENDED)
+
+    def line(self, stdout, kind):
+        return next(ln for ln in stdout.splitlines() if f"[{kind}]" in ln)
+
+    def test_an_absence_without_a_date_is_danger(self):
+        for sentence in (self.ABSENCE, "There is no published SLA for the enterprise tier", "We did not find the vendor's reply",
+                         "We found no record of a published SLA"):
+            with self.subTest(sentence):
+                r = self.last(sentence + ".", first=FLAT)  # nothing upstream is selected: still not "nothing to check"
+                self.assertEqual(r.returncode, 1, r.stdout)
+                self.assertNotIn("NOTHING TO CHECK", r.stdout)
+                line = self.line(r.stdout, "undated absence")  # the sentence and the fix on one line
+                self.assertTrue(line.lstrip().startswith("DANGER"), line)
+                self.assertIn(sentence, line)
+                self.assertIn('fix: write when it was true in the sentence, for example "as of YYYY-MM-DD"', line)
+                self.assertIn("gate: FAIL (1 claims;", r.stdout)
+
+    def test_a_promise_with_never_is_not_an_absence(self):
+        """D-66: "we never" is a promise to the reader, checked by the promise register, not a stale absence."""
+        r = self.last("We never sell your data, and we never give it to other persons.")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertNotIn("undated absence]", r.stdout)
+
+    def test_a_date_anywhere_in_the_sentence_clears_the_absence(self):
+        for sentence in (self.ABSENCE + " as of 2026-11-07.", "As of 2026-11-07 10:00 MSK: " + self.ABSENCE.lower() + ".",
+                         "In November 2026 " + self.ABSENCE.lower() + "."):
+            with self.subTest(sentence):
+                r = self.last(sentence)
+                self.assertEqual(r.returncode, 0, r.stdout)
+                self.assertNotIn("undated absence]", r.stdout)
+
+    def test_a_superlative_without_a_dated_source_is_danger(self):
+        for sentence in (self.SUPERLATIVE + " [the publisher's page]",  # a source with no date does not clear it
+                         "We are the first to publish field-level counts for these releases"):
+            with self.subTest(sentence):
+                r = self.last(sentence + ".")
+                self.assertEqual(r.returncode, 1, r.stdout)
+                line = self.line(r.stdout, "unsourced superlative")
+                self.assertTrue(line.lstrip().startswith("DANGER"), line)
+                self.assertIn(sentence, line)
+                self.assertIn('fix: put its source and date in brackets, for example "[source, YYYY-MM-DD]"', line)
+
+    def test_a_superlative_with_a_dated_source_is_clear(self):
+        for sentence in (self.SUPERLATIVE + " [census of releases, 2026-11-05].",
+                         self.SUPERLATIVE + " (the publisher's page, as of November 2026).", self.SUPERLATIVE + ".[^1]",
+                         "Built with the first team that uses it.", "This is the one claim that must reach the reader."):  # ordinals
+            with self.subTest(sentence):
+                r = self.last(sentence)
+                self.assertEqual(r.returncode, 0, r.stdout)
+                self.assertNotIn("unsourced superlative]", r.stdout)
 
 
 if __name__ == "__main__":

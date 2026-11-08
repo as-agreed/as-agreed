@@ -1,4 +1,4 @@
-include NOTICE CITATION.cff SEND-A-MAP.md ledger.py draw_flow.py
+include NOTICE CITATION.cff CHANGELOG.md SEND-A-MAP.md ledger.py draw_flow.py
 graft examples
 graft readings
 graft tests

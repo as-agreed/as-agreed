@@ -1,0 +1,18 @@
+[
+ {
+  "commitment_id": "refund-5512",
+  "act": "refund order 5512 to the original card",
+  "obligor": "refund-desk",
+  "obligee": "customer",
+  "modality": "MUST",
+  "limit": {
+   "amount": {
+    "max": 240,
+    "unit": "EUR"
+   }
+  },
+  "carried_by": {
+   "limit.amount": "amount"
+  }
+ }
+]

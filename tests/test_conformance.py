@@ -18,7 +18,7 @@ from as_agreed.conformance import SENTENCES, run_suite  # noqa: E402
 from as_agreed.demo import run_demo  # noqa: E402
 from as_agreed.importers.stages import run_folder  # noqa: E402
 
-EXPECTED_SKIPS = {"A4", "A5", "A6", "A8", "I3", "I4", "I5"}
+EXPECTED_SKIPS = {"A4", "A5", "A6", "A8", "I4", "I5"}
 
 
 @contextlib.contextmanager
