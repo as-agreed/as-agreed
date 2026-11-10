@@ -16,7 +16,7 @@ try:
 except ImportError:
     HAVE_LANGGRAPH = False
 
-EXPECTED_SKIPS = {"A6", "I4", "I5"}
+EXPECTED_SKIPS = {"A6"}
 
 
 class LangGraphImport(unittest.TestCase):

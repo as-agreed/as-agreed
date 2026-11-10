@@ -1,5 +1,15 @@
 # Changes
 
+## 0.0.3, 2026-11-07
+
+- `as-agreed import langsmith` reads LangSmith runs: a JSON list, the API data of `/runs/query`, one run with its `child_runs`, a `.jsonl` file, or a CSV file with the same column names. It orders the runs by `dotted_order`. The order is the input of the run whose `id` is the `trace_id`.
+- Each link from LangSmith keeps the `status` of its run, and its `error`. A run with `status` `error` and no output is a link with the text `error: ...`.
+- `as-agreed import otlp` reads OpenTelemetry spans: OTLP JSON, one `TracesData` in a file or one on each line. The type of a step is `gen_ai.operation.name`. An agent is `gen_ai.agent.name` or `gen_ai.agent.id`. The text comes from `gen_ai.output.messages` or `gen_ai.tool.call.result`.
+- A span with no text gives a link with no text. The output line tells how many, and names `OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT`. A trace with no text for the order stops with code 2 and tells you to use `--commitment`.
+- If two traces in one import have the same first 8 characters in their id, `import langsmith` and `import otlp` name each stage folder with the full id.
+- The tests `I4` and `I5` run on this new code. Thus 78 of the 82 tests of `conformance` pass, and 4 do not run.
+- `README.md` names the three commands. Its line on version 0.2 is removed.
+
 ## 0.0.2, 2026-11-07
 
 - The README starts with `pip install as-agreed`, since 0.0.1 is on PyPI.

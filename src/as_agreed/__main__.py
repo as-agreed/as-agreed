@@ -2,8 +2,9 @@
 
 `run`, `register`, `check`, `report` and `flow` are today's command line, delegated unchanged to
 `as_agreed.ledger`. `reconcile <folder>` is the SDK's folder run: every link checked against the
-registered as-agreed record, numeric file order, the README's recommended selection. `import langfuse <export>...
-<out_folder>` writes one stage folder per trace of a Langfuse export, for `reconcile` (SPEC §8.2).
+registered as-agreed record, numeric file order, the README's recommended selection. `import langfuse|langsmith|otlp
+<export>... <out_folder>` writes one stage folder per trace of a Langfuse, LangSmith or OpenTelemetry export, for
+`reconcile` (SPEC §8.2 to §8.4).
 """
 from __future__ import annotations
 
@@ -43,10 +44,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                  (("--expand-claims",), "draw one ribbon per claim on flow.svg instead of one grey band per link"))
     for names, text in map_flags:
         rc.add_argument(*names, action="store_true", help=text)
-    im = sub.add_parser("import", help="write a trace export as stage folders that reconcile reads (Langfuse; SPEC §8.2)")
+    im = sub.add_parser("import", help="write a trace export as stage folders that reconcile reads (SPEC §8.2 to §8.4)")
     fmt = im.add_subparsers(dest="format", required=True)
-    from .importers.langfuse import add_arguments as langfuse_arguments
-    langfuse_arguments(fmt.add_parser("langfuse", help="a Langfuse observation export: an API page or a blob-storage file"))
+    from .importers import langfuse, langsmith, otlp
+    importers = {"langfuse": (langfuse, "a Langfuse observation export: an API page or a blob-storage file"),
+                 "langsmith": (langsmith, "LangSmith runs: JSON or JSON Lines run objects (SDK or API), or CSV"),
+                 "otlp": (otlp, "an OpenTelemetry span file: OTLP JSON or JSON Lines TracesData")}
+    for kind, (module, text) in importers.items():
+        module.add_arguments(fmt.add_parser(kind, help=text))
     dm = sub.add_parser("demo", help="the planted-failure demo: a change that passes every schema check and is held before the commit")
     dm.add_argument("--fixture", choices=("widened", "dropped"), default="widened")
     dm.add_argument("--no-retry", action="store_true")
@@ -78,9 +83,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"{NAME}: {' '.join(str(e).split())}", file=sys.stderr)
             return int(getattr(e, "code", 2))
     if a.cmd == "import":
-        from .importers.langfuse import run_cli
         try:
-            return run_cli(a)
+            return importers[a.format][0].run_cli(a)
         except (ValueError, OSError) as e:  # SPEC §6: a bad input is code 2, one line, no traceback
             print(f"{NAME}: {' '.join(str(e).split())}", file=sys.stderr)
             return 2

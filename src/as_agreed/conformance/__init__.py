@@ -9,7 +9,7 @@ A third-party adapter runs the suite from its own code: `run_suite(my_factory)` 
 repository's no-network test keeps its word for this file too.
 
 Sentences marked for one adapter run there only and are skipped by name elsewhere; I3 runs on the Langfuse importer
-(0.0.2, 2026-11-07), and I4 and I5 are deferred with the LangSmith and OTLP importers (v0.2) and skipped by name.
+(0.0.2, 2026-11-07), I4 on the LangSmith importer and I5 on the OpenTelemetry importer (0.0.3).
 The socket guard of K13 is supplied by the caller (the tests pass one); the suite itself opens nothing.
 The Temporal suite runs inside an activity, from `tests/test_adapter_temporal.py`: the engine parts of A4, A6 and
 T5 need workflow code, which that module runs on the test server and hands in as `engine=` (what it observed);
@@ -79,8 +79,7 @@ class Result:
 
 
 SENTENCES: Dict[str, Tuple[Callable, Any]] = {}
-DEFERRED = {"I4": "deferred with the LangSmith importer (v0.2, D-26)",
-            "I5": "deferred with the OTLP importer (v0.2, D-26)"}
+DEFERRED: Dict[str, str] = {}  # a sentence whose code is not shipped yet, skipped by name: none since 0.0.3
 
 
 def sentence(sid: str, adapter: Any = None) -> Callable:
@@ -1987,14 +1986,134 @@ def i3(env: Env) -> str:
     return "observations to links with parents and text; a missing id and a missing io group named; reconcile holds the commit"
 
 
+def _order_files(folder: str) -> str:
+    """An order file with the pay-invoice commitment beside it, as `--commitment` takes it."""
+    order = os.path.join(folder, "order", "order.md")
+    os.makedirs(os.path.dirname(order))
+    with open(order, "w", encoding="utf-8") as f:
+        f.write(PLAIN_ORDER)
+    with open(os.path.join(folder, "order", "commitments.json"), "w", encoding="utf-8") as f:
+        json.dump([{"commitment_id": "pay-invoice", "act": PAY, "obligor": "finance-ops", "obligee": "northwind-freight",
+                    "modality": "MUST", "limit": {"amount": {"max": 18400, "unit": "USD"}},
+                    "carried_by": {"limit.amount": "amount"}}], f)
+    return order
+
+
+def _reconcile_commit(env: Env, folder: str, commit: str) -> int:
+    ad = env.adapter()
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        code = run_folder(folder, adapter=ad, out_dir=tmpdir())
+    ids = [r["id"] for r in ad.records() if r.get("kind") == "link"]
+    assert ids[-1] == commit, ids
+    assert code == 1 and label_of(ad, commit, "pay-invoice", "limit.amount") == "WIDENED", code
+    return code
+
+
 @sentence("I4")
 def i4(env: Env) -> str:
-    raise AssertionError("deferred")
+    from ..importers import langsmith
+    tid = "trace-i4"
+
+    def run(rid: str, parent: Optional[str], name: str, sec: int, outputs: Any, agent: Optional[str] = None,
+            **extra: Any) -> Dict[str, Any]:
+        r = {"id": rid, "trace_id": tid, "parent_run_id": parent, "name": name, "run_type": "chain",
+             "start_time": f"2030-01-01T10:00:0{sec}.000000", "end_time": f"2030-01-01T10:00:0{sec + 1}.000000",
+             "status": "success", "error": None, "inputs": {"step": name}, "outputs": outputs,
+             "extra": {"metadata": {"gen_ai.agent.name": agent} if agent else {}}}
+        r.update(extra)
+        return r
+
+    rows = [run(tid, None, "pipeline", 0, None, inputs={"task": PLAIN_ORDER}),
+            run("a", tid, "research", 1, {"note": RESEARCH}, agent="researcher"),
+            run("c", "a", "lookup", 2, None, status="error", error="KeyError: po\ntraceback"),
+            run("b", tid, "commit", 3, {"amount": 19800.0, "po": "4471"}, agent="payer")]
+    folder = tmpdir()
+    export = os.path.join(folder, "runs.jsonl")
+    with open(export, "w", encoding="utf-8") as f:
+        f.write("".join(json.dumps(r) + "\n" for r in rows[::-1]))
+    traces, _ = langsmith.read_exports([export])
+    meta, links = langsmith.read_trace(traces[tid], langsmith.Scrub(True))
+    assert [(l["phase"], l["parent"]) for l in links[1:]] == [("research", 0), ("lookup", 1), ("commit", 0)], links
+    assert links[0]["text"] == "task: " + PLAIN_ORDER.strip(), links[0]
+    assert links[1]["text"].startswith("note: The invoice total is 18,400 dollars") and \
+        links[3]["text"] == "amount: 19800.0\npo: 4471", links
+    assert (links[2]["status"], links[2]["text"]) == ("error", "error: KeyError: po"), links[2]
+    assert meta["handoffs"] == [{"at_link": 3, "from_agent": "researcher", "to_agent": "payer", "via": None,
+                                 "to_observation_id": "b"}], meta["handoffs"]
+    with open(export, "w", encoding="utf-8") as f:
+        json.dump([rows[0], dict(rows[1], id=None)], f)
+    try:
+        langsmith.read_exports([export])
+        raise AssertionError("a run with no id was read")
+    except ValueError as e:
+        assert "`id`" in str(e), str(e)
+    with open(export, "w", encoding="utf-8") as f:
+        json.dump([{k: v for k, v in r.items() if k not in ("inputs", "outputs")} for r in rows], f)
+    try:
+        langsmith.convert([export], os.path.join(folder, "empty"))
+        raise AssertionError("runs with no inputs and no outputs were written as empty links")
+    except ValueError as e:
+        assert "`inputs` or an `outputs`" in str(e), str(e)
+    assert not os.path.exists(os.path.join(folder, "empty")), "a refused export left a folder"
+    with open(export, "w", encoding="utf-8") as f:
+        json.dump({"runs": rows}, f)
+    (name, _), = langsmith.convert([export], os.path.join(folder, "stages"), commitment=_order_files(folder))
+    _reconcile_commit(env, os.path.join(folder, "stages", name), "payer-commit#1@1")
+    return "runs to links with parents, text, status and error; a missing id and missing inputs named; reconcile holds the commit"
 
 
 @sentence("I5")
 def i5(env: Env) -> str:
-    raise AssertionError("deferred")
+    from ..importers import otlp
+    tid = "5a" * 16
+
+    def span(sid: str, parent: Optional[str], name: str, sec: int, **attrs: Any) -> Dict[str, Any]:
+        return {"traceId": tid, "spanId": sid, "parentSpanId": parent or "", "name": name,
+                "startTimeUnixNano": str((1_900_000_000 + sec) * 10 ** 9),
+                "endTimeUnixNano": str((1_900_000_001 + sec) * 10 ** 9),
+                "attributes": [{"key": k, "value": {"stringValue": v if isinstance(v, str) else json.dumps(v)}}
+                               for k, v in attrs.items()]}
+
+    def says(role: str, text: str) -> List[Dict[str, Any]]:
+        return [{"role": role, "parts": [{"type": "text", "content": text}]}]
+
+    spans = [span("r", None, "invoke_workflow pay", 0, **{"gen_ai.operation.name": "invoke_workflow",
+                                                         "gen_ai.input.messages": says("user", PLAIN_ORDER)}),
+             span("a", "r", "chat research", 1, **{"gen_ai.operation.name": "chat", "gen_ai.agent.name": "researcher",
+                                                   "gen_ai.output.messages": says("assistant", RESEARCH)}),
+             span("c", "a", "execute_tool lookup", 2, **{"gen_ai.operation.name": "execute_tool"}),
+             span("b", "r", "execute_tool commit", 3, **{"gen_ai.operation.name": "execute_tool",
+                                                         "gen_ai.agent.name": "payer",
+                                                         "gen_ai.tool.call.result": {"amount": 19800.0, "po": "4471"}})]
+    folder = tmpdir()
+    export = os.path.join(folder, "spans.json")
+
+    def save(ss: List[Dict[str, Any]]) -> None:
+        with open(export, "w", encoding="utf-8") as f:
+            json.dump({"resourceSpans": [{"scopeSpans": [{"spans": ss}]}]}, f)
+
+    save(spans[::-1])
+    traces = otlp.read_exports([export])
+    meta, links = otlp.read_trace(traces[tid], otlp.Scrub(True))
+    assert [(l["phase"], l["parent"]) for l in links[1:]] == [("chat research", 0), ("execute_tool lookup", 1),
+                                                             ("execute_tool commit", 0)], links
+    assert links[0]["text"] == PLAIN_ORDER and links[1]["text"] == RESEARCH, links
+    assert links[2]["text"] == "" and links[2]["content"] == "not captured", links[2]
+    assert links[3]["text"] == "amount: 19800.0\npo: 4471", links[3]
+    assert (meta["content_not_captured"], meta["content_not_captured_at_links"]) == (1, [2]), meta
+    assert "OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT" in " ".join(otlp.notes(meta)), otlp.notes(meta)
+    save([span("r", None, "invoke_workflow pay", 0, **{"gen_ai.operation.name": "invoke_workflow"})] + spans[2:])
+    try:
+        otlp.convert([export], os.path.join(folder, "empty"))
+        raise AssertionError("a trace with no content was written with an empty order")
+    except ValueError as e:
+        assert "--commitment" in str(e) and "OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT" in str(e), str(e)
+    assert not os.path.exists(os.path.join(folder, "empty")), "a refused export left a folder"
+    save(spans)
+    (name, _), = otlp.convert([export], os.path.join(folder, "stages"), commitment=_order_files(folder))
+    _reconcile_commit(env, os.path.join(folder, "stages", name), "payer-execute_tool-commit#1@1")
+    return ("spans with content to links with text, a span without content to an empty link counted apart with the "
+            "setting named; a root without content refused with the --commitment hint; reconcile holds the commit")
 
 
 @sentence("I6")

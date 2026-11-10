@@ -20,7 +20,7 @@ try:
 except ImportError:
     HAVE_TEMPORAL = False
 
-EXPECTED_SKIPS = {"A5", "A8", "I4", "I5"}
+EXPECTED_SKIPS = {"A5", "A8"}
 
 
 class TemporalImport(unittest.TestCase):

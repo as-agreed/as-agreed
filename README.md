@@ -68,16 +68,18 @@ prepare("Pay 19,800 dollars.")  # raises DriftHold: limit.amount WIDENED; pay() 
 
 Run this code from the clone with `PYTHONPATH=src`. A commitment must have 4 fields: `act`, `obligor`, `obligee` and `modality`. The fields `condition`, `limit`, `deadline` and `acceptance_criteria` are optional. The key `carried_by` tells As-Agreed which output key holds a field. The step gets the reason in `reason`, and it runs one more time. If the next output also breaks the limit, As-Agreed stops the step. The record goes to `ledger.jsonl` in the folder where you start Python.
 
-## Read your Langfuse traces
+## Read your traces
 
-As-Agreed reads Langfuse traces today, with one line. It writes one stage folder for each trace, and the next line checks that folder:
+As-Agreed reads traces from Langfuse, LangSmith and OpenTelemetry today: `as-agreed import langfuse`, `as-agreed import langsmith` and `as-agreed import otlp`. It writes one stage folder for each trace, and the next line checks that folder:
 
 ```
 as-agreed import langfuse trace.json stages --commitment order/order.md
 as-agreed reconcile stages/trace-<id>
 ```
 
-Give it a file from Langfuse: the API data, with `fields=core,basic,io`, or a file from its folder `observations_v2/`. With `--commitment`, the order is your file, and the `commitments.json` file next to it is copied with it. Without `--commitment`, the order is the input at the top of the trace. It is marked `proxy: true`, because that input is not an agreement. It finds an agent only where the trace declares one, and a hand-off where that agent changes.
+Give `import langfuse` a file from Langfuse: the API data, with `fields=core,basic,io`, or a file from its folder `observations_v2/`. Give `import langsmith` the runs as JSON, `.jsonl` or CSV. Give `import otlp` an OTLP JSON file. With `--commitment`, the order is your file, and the `commitments.json` file next to it is copied with it. Without `--commitment`, the order is the input at the top of the trace. It is marked `proxy: true`, because that input is not an agreement. It finds an agent only where the trace declares one, and a hand-off where that agent changes.
+
+OpenTelemetry tools usually write no text of a step into a trace. Where a tool reads `OTEL_INSTRUMENTATION_GENAI_CAPTURE_CONTENT`, set it to `SPAN_ONLY`. A step with no text gives an empty stage, and the output line tells how many.
 
 ## The text gate
 
@@ -95,7 +97,7 @@ It compares only the fields that you declare, and it does not read a field from 
 
 ## Where this goes
 
-Version 0.2 will read traces from LangSmith and `OpenTelemetry`. To use the As-Agreed service, you will change one value in your code: `destination=`. All other code stays the same.
+To use the As-Agreed service, you will change one value in your code: `destination=`. All other code stays the same.
 
 ## Tests
 

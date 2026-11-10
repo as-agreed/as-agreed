@@ -129,6 +129,7 @@ it, what, under, line
 | Temporal | a workflow tool that runs long tasks and tries a step again after an error |
 | Langfuse | a tool that writes traces of a pipeline |
 | LangSmith | a tool that writes traces of a pipeline |
+| OpenTelemetry | an open standard for traces, and the tools that write traces in its format |
 | library | the As-Agreed code that you import into your pipeline |
 | team | a group of persons who work together |
 | today | on the date of the text |

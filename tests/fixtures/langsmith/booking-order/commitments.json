@@ -1,0 +1,18 @@
+[
+ {
+  "commitment_id": "book-lumen",
+  "act": "book a table for four at Lumen on 12 March 2030",
+  "obligor": "booking-desk",
+  "obligee": "guest",
+  "modality": "MUST",
+  "limit": {
+   "total": {
+    "max": 200,
+    "unit": "EUR"
+   }
+  },
+  "carried_by": {
+   "limit.total": "total"
+  }
+ }
+]

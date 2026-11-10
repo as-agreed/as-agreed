@@ -1,0 +1,18 @@
+[
+ {
+  "commitment_id": "seats-lyon",
+  "act": "book two train seats to Lyon for 14 May 2030",
+  "obligor": "trip-desk",
+  "obligee": "traveller",
+  "modality": "MUST",
+  "limit": {
+   "total": {
+    "max": 120,
+    "unit": "EUR"
+   }
+  },
+  "carried_by": {
+   "limit.total": "total"
+  }
+ }
+]
