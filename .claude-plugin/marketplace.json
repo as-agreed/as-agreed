@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "as-agreed",
-      "description": "Checks a declared step's tool call against the agreed record a person confirmed, and stops the call when a binding term is missing or changed. Code only, no model, nothing leaves the machine.",
+      "description": "Checks a declared step's tool call against the agreed record a person confirmed, and stops the call when a binding term is missing or changed. Code only, no model, no network connection.",
       "source": "./",
       "category": "development"
     }

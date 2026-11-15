@@ -8,7 +8,7 @@ description: >
 
 # As-Agreed: record what was agreed, then let the hook check each step
 
-The hook checks a tool call only when the folder of the work has `.as-agreed/binding.json`. You write the record and the binding. The person agrees to them before the hook uses them.
+The hook checks a tool call only when the folder where Claude Code starts has `.as-agreed/binding.json`. You write the record and the binding. The person agrees to them before the hook uses them.
 
 ## 1. Write the record: `.as-agreed/record.json`
 
@@ -42,7 +42,7 @@ The hook checks a tool call only when the folder of the work has `.as-agreed/bin
 
 ## 3. Show the record and the binding to the person
 
-Tell the person each commitment, its value, and its key. Tell the person which tool call the hook checks. Write `confirmed_by` and `confirmed_at` only after the person agrees. After that, the hook stops each file tool that changes the record or the binding. Only the person can then agree to a change.
+Tell the person each commitment, its value, and its key. Tell the person which tool call the hook checks. Then tell the person to manually write their name in `confirmed_by`. The hook stops a file tool that writes `confirmed_by`. After the person writes it, the hook stops each file tool that changes the record or the binding.
 
 ## 4. When the hook stops a call
 

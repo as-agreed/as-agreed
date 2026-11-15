@@ -177,37 +177,54 @@ def _minutes(m: float) -> str:
     return f"{h} h {mm} min" if h else f"{mm} min"
 
 
+def _rank(r: Mapping[str, Any]) -> int:
+    """Within one link, the worst verdict of a field stands: a change or a loss, then undecided, then kept."""
+    cls = r.get("drift_class")
+    return 2 if cls in CHANGES + LOSSES else 0 if cls in FAITHFUL else 1
+
+
 def flag(rows: Iterable[Mapping[str, Any]], baseline_minutes: Optional[float] = None) -> List[str]:
     """The run's flag (D-181, D-191), the verdict first and the value second, from the run's records.
 
-    Counted over the fields of the binding commitments (MUST, MUST_NOT), each at its last verdict in the run: kept
-    (PRESERVED or RESTATED), held (a change, or a loss), unchecked (code could not decide). A term counts as kept
-    because of the check when a step under the hold policy was held on it and the term arrived as agreed after.
-    Review time appears only against a baseline the user sets, in minutes of review per run."""
+    Counted over the fields of the binding commitments (MUST, MUST_NOT), each at its last link in the run (within a
+    link, its worst verdict): kept (PRESERVED or RESTATED), held (changed or lost at a link that a hold stopped),
+    changed and not held, unchecked (code could not decide). A term counts as kept because of the check when a hold
+    stopped it at one link and it was kept at a later link that passed its hold. Review time appears only against a
+    baseline the user sets, in minutes of manual check per run."""
     rows = list(rows)
-    caught = {h.get("link") for h in rows if h.get("kind") == "hold" and not h.get("passed")
-              and (h.get("policy") or {}).get("on_loss") == "hold"}
+    holds_ = [h for h in rows if h.get("kind") == "hold" and (h.get("policy") or {}).get("on_loss") == "hold"]
+    stopped = {h.get("link") for h in holds_ if not h.get("passed")}
+    passed = {h.get("link") for h in holds_ if h.get("passed")}
     limits = {r.get("commitment_id"): r.get("limit") or {} for r in rows if r.get("kind") == "commitment"}
     last: "OrderedDict[Tuple[str, str], Mapping[str, Any]]" = OrderedDict()
-    held_once = set()
+    caught = set()
     for r in rows:
         if r.get("kind") != "verdict" or r.get("unit_kind") != "commitment" or not r.get("must"):
             continue
         key = (r.get("unit"), r.get("field"))
+        before = last.get(key)
+        if before is not None and before.get("link") == r.get("link") and _rank(before) >= _rank(r):
+            continue
         last.pop(key, None)
         last[key] = r
-        if r.get("link") in caught and r.get("drift_class") in CHANGES + LOSSES:
-            held_once.add(key)
+        if r.get("link") in stopped and _rank(r) == 2:
+            caught.add(key)
     if not last:
         return ["Kept as agreed: no binding term was checked in this run"]
-    kept = [k for k, r in last.items() if r.get("drift_class") in FAITHFUL]
-    held = [r for r in last.values() if r.get("drift_class") in CHANGES + LOSSES]
-    open_ = [r for r in last.values() if not r.get("drift_class")]
+    kept = [k for k, r in last.items() if _rank(r) == 0]
+    held = [r for r in last.values() if _rank(r) == 2 and r.get("link") in stopped]
+    through = [r for r in last.values() if _rank(r) == 2 and r.get("link") not in stopped]
+    open_ = [r for r in last.values() if _rank(r) == 1]
     where = " and ".join(sorted({"delivery" if r.get("state") == "as_delivered" else "a brief" for r in last.values()}))
-    detail = " (" + "; ".join(f"{r['unit']} {r['field']} {r['drift_class']}: {r.get('reason', '')}" for r in held) + ")"
+
+    def named(rs: List[Mapping[str, Any]]) -> str:
+        return " (" + "; ".join(f"{r['unit']} {r['field']} {r['drift_class']}: {r.get('reason', '')}" for r in rs) + ")"
+
     lines = [f"Kept as agreed: {len(kept)} of {len(last)} binding terms, checked at {where}; "
-             f"{len(held)} held{detail if held else ''}; {len(open_)} unchecked"]
-    saved = [k for k in kept if k in held_once]
+             f"{len(held)} held{named(held) if held else ''}; "
+             + (f"{len(through)} changed and not held{named(through)}; " if through else "")
+             + f"{len(open_)} unchecked"]
+    saved = [k for k in kept if k in caught and last[k].get("link") in passed]
     stake: Dict[str, float] = {}
     for unit, field in saved:
         money = _currency(limits.get(unit, {}).get(field.partition(".")[2])) if field.startswith("limit.") else None
@@ -216,9 +233,9 @@ def flag(rows: Iterable[Mapping[str, Any]], baseline_minutes: Optional[float] = 
     lines.append(f"{len(saved)} of {len(last)} terms kept that would have been lost"
                  + ("".join(f", {v:,.0f} {c}" for c, v in sorted(stake.items())) + " at stake" if stake else ""))
     if baseline_minutes is not None:
-        # shortcut: a run that held or left a term unchecked returns no review time; minutes per card come later
-        if held or open_:
-            lines.append(f"Review returned: none; {len(held) + len(open_)} terms wait for your read "
+        # shortcut: a run that held, let a change through or left a term unchecked returns no review time
+        if held or through or open_:
+            lines.append(f"Review returned: none; {len(held) + len(through) + len(open_)} terms wait for your read "
                          f"(your baseline: {_minutes(baseline_minutes)} per run)")
         else:
             lines.append(f"Review returned: {_minutes(baseline_minutes)} (your baseline per run)")

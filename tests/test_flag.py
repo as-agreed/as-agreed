@@ -68,6 +68,24 @@ class TheFlag(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0]["lines"][0].startswith("Kept as agreed: 2 of 2"))
 
+    def test_a_field_decided_twice_at_one_link_keeps_its_worst_verdict(self):
+        record = {"commitment_id": "pay", "parent_id": None, "act": "pay the invoice", "obligor": "finance",
+                  "obligee": "northwind", "modality": "MUST", "limit": {"amount": {"max": 19800, "unit": "USD"}}}
+        lines = flag_of(run(out(amount=18000.0, commitments=[record])))
+        self.assertIn("1 held (pay limit.amount WIDENED", lines[0])
+        self.assertEqual(lines[1], "0 of 5 terms kept that would have been lost")
+
+    def test_nothing_counts_as_kept_by_the_check_when_the_retry_is_held_too(self):
+        lines = flag_of(run(out(amount=19800.0), then=out(amount=19900.0), retries=1))
+        self.assertEqual(lines[1], "0 of 2 terms kept that would have been lost")
+
+    def test_a_change_that_no_hold_stopped_is_not_called_held(self):
+        from as_agreed.hold import flag
+        rows = [{"kind": "hold", "link": "brief#1@1", "passed": False, "policy": {"on_loss": "record"}},
+                {"kind": "verdict", "unit_kind": "commitment", "must": True, "unit": "pay", "field": "limit.amount",
+                 "link": "brief#1@1", "drift_class": "WIDENED", "state": "as_briefed", "reason": "r"}]
+        self.assertIn("0 held; 1 changed and not held (pay limit.amount WIDENED: r)", flag(rows)[0])
+
     def test_a_loss_only_recorded_upstream_is_not_counted_as_caught(self):
         from as_agreed.hold import flag
         rows = [{"kind": "commitment", "commitment_id": "pay", "limit": PAY["limit"]},

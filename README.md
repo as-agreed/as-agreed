@@ -79,7 +79,7 @@ Give a step a `binding`. Then As-Agreed checks only the commitments in `serves`:
          binding={"serves": ["pay"], "kind": "takes_effect", "author": "finance"})
 ```
 
-If the output does not have a key that the step must have, the field is `DROPPED`. Then the step stops. A field that the step does not have to give is not `DROPPED`. If that field arrives with a different value, the change counts.
+If the output does not have a key that the step must have, the field is `DROPPED`. Then a commit step stops if the commitment is `MUST` or `MUST_NOT`. A field that the step does not have to give is not `DROPPED`. If that field arrives with a different value, the change counts.
 
 The `kind` tells what the step must have:
 
@@ -98,19 +98,20 @@ Kept as agreed: 0 of 5 binding terms, checked at delivery; 1 held (pay-invoice l
 0 of 5 terms kept that would have been lost
 ```
 
-The first line counts the fields of the `MUST` and `MUST_NOT` commitments at their last check. The next line counts the fields that arrive as agreed only because a hold made the step run again. It also gives the total of their agreed limits that have a unit such as `USD`. Each step also writes these lines to `ledger.jsonl`.
+The first line counts the fields of the `MUST` and `MUST_NOT` commitments at their last check. It names each field that a hold stops, and each field that changed with no hold. The next line counts the fields that arrive as agreed only because a hold made the step run again. It also gives the total of their agreed limits that have a unit such as `USD`. Each step also writes these lines to `ledger.jsonl`.
 
 Set `baseline_minutes` to your time for a manual check of one run. Then the flag also shows that time when no person must look at the run. Give `baseline_minutes` to `report`, or `--baseline-minutes` to `as-agreed`.
 
 ## Use it with Claude Code
 
 ```
-/plugin install as-agreed --marketplace as-agreed/as-agreed
+/plugin marketplace add as-agreed/as-agreed
+/plugin install as-agreed@as-agreed
 ```
 
-The plugin adds a skill and a hook. The skill tells the agent to write the agreed record and the binding in `.as-agreed/`. The agent shows them to you. The hook uses the record only after you agree to it.
+The plugin adds a skill and a hook. The skill tells the agent to write the agreed record and the binding in `.as-agreed/`. The agent shows them to you. Then you manually write your name in `confirmed_by`. The hook stops a file tool that writes `confirmed_by`. The hook uses the record only after `confirmed_by` has a name.
 
-The hook runs before each tool call. It checks only the calls in `.as-agreed/binding.json`. It stops a call if a must term is missing or changed. It also stops a file tool that changes the record after you agree to it. Each call writes one line to `.as-agreed/hook.jsonl`, without the input of the call. The hook uses the `src/` folder of the plugin and `python3`. It does not use the network.
+The hook runs before each tool call. It checks only the calls in `.as-agreed/binding.json`. It stops a call if a term changed, or if a must term is missing. It also stops a file tool that changes the record after you write your name. Each checked call writes one line to `.as-agreed/hook.jsonl`, without the values of the call. The hook uses `python3`, version 3.9 or higher. It uses the `src/` folder of the plugin, and it does not use the network.
 
 Run the hook on the example, with no agent:
 
@@ -145,7 +146,7 @@ python3 ledger.py run examples/planted-failure --against-all --only hedged,not_f
 
 ## Its limits
 
-It compares only the fields that you declare, and it does not read a field from text. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make.
+It compares only the fields that you declare, and it does not read a field from text. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` only in the folder where Claude Code starts.
 
 ## Where this goes
 

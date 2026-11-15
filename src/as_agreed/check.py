@@ -325,7 +325,7 @@ def check_link(outputs: Any, agreed: AsAgreed, *, run_id: str, link_id: str, ts:
         if due is not None and c.commitment_id not in due.serves:
             continue
         found = read(c, declared, ids)
-        for f in (due.apply(c, found) if due is not None else found):
+        for f in (due.apply(c, found, declared.records is not None) if due is not None else found):
             v = commitment_verdict(c, f)
             verdicts.append(v)
             if f.drift_class is None:

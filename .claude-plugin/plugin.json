@@ -1,7 +1,7 @@
 {
   "name": "as-agreed",
   "version": "0.1.0",
-  "description": "Checks a declared step's tool call against the agreed record a person confirmed, and stops the call when a binding term is missing or changed. Code only, no model, nothing leaves the machine.",
+  "description": "Checks a declared step's tool call against the agreed record a person confirmed, and stops the call when a binding term is missing or changed. Code only, no model, no network connection.",
   "author": {
     "name": "BizBuilder, Inc.",
     "url": "https://github.com/as-agreed"

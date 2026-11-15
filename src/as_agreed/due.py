@@ -56,15 +56,16 @@ class Due:
             return [f for f in fields if f.partition(".")[0] in heads]
         return []
 
-    def apply(self, c: Commitment, findings: List[Finding]) -> List[Finding]:
+    def apply(self, c: Commitment, findings: List[Finding], records: bool = False) -> List[Finding]:
         """An owed field whose key is missing is DROPPED by code. A field the step does not owe gives no finding for
-        not being there, and a change to it still counts."""
+        not being there, and a change to it still counts. On a payload a missing key reads UNDECLARED, so a DROPPED
+        there is a key given as null, which stays; a `commitments` record may leave out what the step does not owe."""
         owed = set(self.owed(c))
         out: List[Finding] = []
         for f in findings:
             if f.field in owed and f.missing_key and f.undecided == UNDECLARED:
                 out.append(Finding(f.field, DROPPED, f"owed by this {self.kind} step, and its key {f.missing_key} "
                                                      f"is not in the output", f.agreed, missing_key=f.missing_key))
-            elif f.field in owed or not (f.drift_class == DROPPED or f.undecided == UNDECLARED):
+            elif f.field in owed or not (f.undecided == UNDECLARED or (records and f.drift_class == DROPPED)):
                 out.append(f)
         return out

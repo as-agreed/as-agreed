@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 import as_agreed.sdk as ab  # noqa: E402
+from as_agreed.due import Due  # noqa: E402
 
 PAY = dict(act="pay the invoice", obligor="finance", obligee="northwind", modality="MUST", commitment_id="pay",
            limit={"amount": {"max": 18400, "unit": "USD"}},
@@ -79,9 +80,14 @@ class OnlyWhatIsServed(unittest.TestCase):
         got = classes(ab.check({"amount": 19800.0}, agreed, delivered=True, binding=brief))
         self.assertEqual(got, {("pay", "limit.amount"): "WIDENED"})
 
+    def test_a_null_given_for_a_field_not_owed_still_counts(self):
+        agreed, _ = record(PAY)
+        got = classes(ab.check({"amount": None}, agreed, delivered=True, binding={"serves": ["pay"], "kind": "mentions"}))
+        self.assertEqual(got, {("pay", "limit.amount"): "DROPPED"})
+
     def test_a_brief_owes_everything_but_the_obligee(self):
         agreed, _ = record(PAY)
-        due = ab.Due({"serves": ["pay"], "kind": "sets_terms"}, agreed)
+        due = Due({"serves": ["pay"], "kind": "sets_terms"}, agreed)
         self.assertEqual(due.owed(agreed.commitment("pay")), ["obligor", "act", "modality", "limit.amount"])
 
 
@@ -102,7 +108,7 @@ class TheObligorFix(unittest.TestCase):
 
     def test_names_match_without_case_or_spacing(self):
         agreed, _ = record(PAY)
-        due = ab.Due({"serves": ["pay"], "kind": "takes_effect", "author": "  Finance "}, agreed)
+        due = Due({"serves": ["pay"], "kind": "takes_effect", "author": "  Finance "}, agreed)
         self.assertIn("obligor", due.owed(agreed.commitment("pay")))
 
 

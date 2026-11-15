@@ -18,7 +18,6 @@ from .check import Escalation, Tier2, Tier3, ValueReader, Verdict, check_link, f
 from .commitment import FORMAT, MODALITIES, AsAgreed, Claim, Commitment, Criterion, build, cut
 from .destination import Envelope, LocalDestination, RemoteDestination
 from .drift import MISSING_KEY_MODES, DRIFT_CLASSES, LINK_TYPES
-from .due import Due
 from .errors import (AsAgreedExists, AsAgreedError, DriftHold, EmptyAsAgreed, NoCommitment, SchemaError,
                      WorkflowContextError)
 from .hold import DEFAULT_FAIL_ON, Hold, Policy, decide, flag
@@ -33,7 +32,7 @@ __all__ = ["register", "step", "run", "check", "hold", "retry", "report", "Commi
            "Verdict", "Hold", "Outcome", "Tier2", "Tier3", "ValueReader", "Escalation", "RecallRow", "fidelity_score", "PlainAdapter",
            "memory_adapter", "LocalDestination", "RemoteDestination", "Envelope", "current_reason", "AsAgreedError",
            "NoCommitment", "AsAgreedExists", "EmptyAsAgreed",
-           "SchemaError", "DriftHold", "WorkflowContextError", "Policy", "MAX_RETRIES", "DRIFT_CLASSES", "MODALITIES", "Due"]
+           "SchemaError", "DriftHold", "WorkflowContextError", "Policy", "MAX_RETRIES", "DRIFT_CLASSES", "MODALITIES"]
 
 SCHEMA_TYPES = (float, int, str, bool, list, dict)
 
