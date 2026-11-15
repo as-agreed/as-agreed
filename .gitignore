@@ -8,3 +8,4 @@ build/
 dist/
 examples/*/as-agreed/
 *.egg-info/
+hook.jsonl

@@ -12,6 +12,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from .check import fidelity_score
 from .commitment import OPTIONAL_FIELDS
 from .drift import DRIFT_CLASSES, ESCALATED, FAITHFUL, UNDECLARED, describe
+from .hold import flag
 from .serialise import sha256, short
 
 ORIGIN_COLOURS = {"MUST": "#3b7a57", "MUST_NOT": "#2f5d8a", "SHOULD": "#c7a24a", "MAY": "#8a7f8d",
@@ -92,6 +93,7 @@ class Report:
     tiers: Dict[str, int] = field(default_factory=dict)
     fidelity: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     drafter: Optional[Dict[str, str]] = None  # who drafted a proxy record's commitments (SPEC §1.1, draft 8)
+    flag_lines: List[str] = field(default_factory=list)  # the run's flag (D-181, D-191), printed after the gate
 
     def text(self, per_unit: bool = True) -> str:
         out: List[str] = []
@@ -101,6 +103,7 @@ class Report:
         out.extend("  " + ln for ln in self.count_lines)
         out.append(self.gate_line)
         out.extend("  " + ln for ln in self.danger_lines)
+        out.extend(self.flag_lines)
         out.extend(self.tail_lines)
         return "\n".join(out)
 
@@ -140,7 +143,8 @@ def _better(old: Optional[dict], new: dict) -> dict:
 
 
 def build(records: List[dict], out_dir: str, *, title: str = "", run_id: Optional[str] = None,
-          recall: Iterable[Any] = (), expand_claims: bool = False, values: bool = False) -> Report:
+          recall: Iterable[Any] = (), expand_claims: bool = False, values: bool = False,
+          baseline_minutes: Optional[float] = None) -> Report:
     """Build the three files and the printed lines from a run's records.
 
     The map is in its shared form unless the caller asks: claim sentences collapsed into one grey band per link
@@ -296,7 +300,7 @@ def build(records: List[dict], out_dir: str, *, title: str = "", run_id: Optiona
     tail.append(f"min_words {min_words}")
     tail.append(f"report: ledger.jsonl, counts.csv, flow.svg written to {out_dir}    code {code}")
     return Report(rid, code, unit_lines, count_lines, gate, danger, tail, csv_path, svg_path, ledger_path, proxy,
-                  min_words, dict(tiers), fidelity, drafter)
+                  min_words, dict(tiers), fidelity, drafter, flag(recs, baseline_minutes))
 
 
 def _uncheckable(commitments: Dict[str, dict]) -> List[str]:

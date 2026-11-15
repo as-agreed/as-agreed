@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"${CLAUDE_PROJECT_DIR}/.as-agreed/binding.json\" ]; then PYTHONPATH=\"${CLAUDE_PLUGIN_ROOT}/src\" python3 -m as_agreed hook; fi",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

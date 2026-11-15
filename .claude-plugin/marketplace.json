@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "as-agreed",
+  "description": "As-Agreed: what you agreed is what arrives.",
+  "owner": {
+    "name": "BizBuilder, Inc.",
+    "url": "https://github.com/as-agreed"
+  },
+  "plugins": [
+    {
+      "name": "as-agreed",
+      "description": "Checks a declared step's tool call against the agreed record a person confirmed, and stops the call when a binding term is missing or changed. Code only, no model, nothing leaves the machine.",
+      "source": "./",
+      "category": "development"
+    }
+  ]
+}

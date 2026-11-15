@@ -14,6 +14,8 @@ The library runs today, on your computer. The record is a file on your disk. The
 
 After version 0.2, the As-Agreed service will keep the same record for all your runs and teams, over time.
 
+Version 0.1.0 adds a binding for each step, a flag after each run, and a plugin for Claude Code.
+
 ## Run the demo
 
 ```
@@ -68,6 +70,56 @@ prepare("Pay 19,800 dollars.")  # raises DriftHold: limit.amount WIDENED; pay() 
 
 Run this code from the clone with `PYTHONPATH=src`. A commitment must have 4 fields: `act`, `obligor`, `obligee` and `modality`. The fields `condition`, `limit`, `deadline` and `acceptance_criteria` are optional. The key `carried_by` tells As-Agreed which output key holds a field. The step gets the reason in `reason`, and it runs one more time. If the next output also breaks the limit, As-Agreed stops the step. The record goes to `ledger.jsonl` in the folder where you start Python.
 
+## Tell each step what it must have
+
+Give a step a `binding`. Then As-Agreed checks only the commitments in `serves`:
+
+```python
+@aa.step("commit", agreed, commit=pay,
+         binding={"serves": ["pay"], "kind": "takes_effect", "author": "finance"})
+```
+
+If the output does not have a key that the step must have, the field is `DROPPED`. Then the step stops. A field that the step does not have to give is not `DROPPED`. If that field arrives with a different value, the change counts.
+
+The `kind` tells what the step must have:
+
+- `sets_terms`: a step that gives the task to a different agent. It must have all the fields, but not `obligee`.
+- `takes_effect`: the step that does the work. It must have `act`, `limit`, `deadline`, `condition` and `acceptance_criteria`.
+- `mentions`: a step that must have no field.
+
+A `takes_effect` step must have `obligor` only if the `author` or the `recipient` is the `obligor`. A step with no `binding` is checked as before.
+
+## The flag after each run
+
+After the gate, the report and the demo show the flag. The demo with `--no-retry` shows these lines:
+
+```
+Kept as agreed: 0 of 5 binding terms, checked at delivery; 1 held (pay-invoice limit.amount WIDENED: 19800 where at most 18400 USD was agreed); 4 unchecked
+0 of 5 terms kept that would have been lost
+```
+
+The first line counts the fields of the `MUST` and `MUST_NOT` commitments at their last check. The next line counts the fields that arrive as agreed only because a hold made the step run again. It also gives the total of their agreed limits that have a unit such as `USD`. Each step also writes these lines to `ledger.jsonl`.
+
+Set `baseline_minutes` to your time for a manual check of one run. Then the flag also shows that time when no person must look at the run. Give `baseline_minutes` to `report`, or `--baseline-minutes` to `as-agreed`.
+
+## Use it with Claude Code
+
+```
+/plugin install as-agreed --marketplace as-agreed/as-agreed
+```
+
+The plugin adds a skill and a hook. The skill tells the agent to write the agreed record and the binding in `.as-agreed/`. The agent shows them to you. The hook uses the record only after you agree to it.
+
+The hook runs before each tool call. It checks only the calls in `.as-agreed/binding.json`. It stops a call if a must term is missing or changed. It also stops a file tool that changes the record after you agree to it. Each call writes one line to `.as-agreed/hook.jsonl`, without the input of the call. The hook uses the `src/` folder of the plugin and `python3`. It does not use the network.
+
+Run the hook on the example, with no agent:
+
+```
+CLAUDE_PROJECT_DIR=examples/plugin-hold PYTHONPATH=src python3 -m as_agreed hook < examples/plugin-hold/events/dropped.json
+```
+
+The output stops the call, because the field `limit.amount` is `DROPPED`. The file `events/faithful.json` passes.
+
 ## Read your traces
 
 As-Agreed reads traces from Langfuse, LangSmith and OpenTelemetry today: `as-agreed import langfuse`, `as-agreed import langsmith` and `as-agreed import otlp`. It writes one stage folder for each trace, and the next line checks that folder:
@@ -93,7 +145,7 @@ python3 ledger.py run examples/planted-failure --against-all --only hedged,not_f
 
 ## Its limits
 
-It compares only the fields that you declare, and it does not read a field from text. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`.
+It compares only the fields that you declare, and it does not read a field from text. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make.
 
 ## Where this goes
 

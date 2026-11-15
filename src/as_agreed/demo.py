@@ -112,6 +112,8 @@ def run_demo(fixture: str = "widened", *, retry: bool = True, out_dir: Optional[
             say("  " + ln)
     for ln in gate:
         say(ln)
+    for ln in rep.flag_lines:
+        say(ln)
     for ln in rep.tail_lines[:-1]:
         say(ln)
     say(f"report: ledger.jsonl, counts.csv, flow.svg written to {out}    code {code}    ({time.time() - started:.2f} s)")

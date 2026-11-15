@@ -1,5 +1,16 @@
 # Changes
 
+## 0.1.0, 2026-11-15
+
+- A step can have a `binding`: the commitments that it `serves`, its `kind`, its `author` and its `recipient`. As-Agreed then checks only those commitments at that step.
+- A key that the step must have and that is not in its output gives `DROPPED`. As-Agreed does the same with `on_missing_key="undeclared"`. A field that the step does not have to give is not `DROPPED`. A different value of that field counts.
+- A `takes_effect` step must have `obligor` only if its `author` or its `recipient` is the `obligor`.
+- After each run, the report and the demo show the flag. The first line counts the binding terms that arrived as agreed. It also counts the terms that a hold stops, and the terms that code cannot check. The next line counts the terms that arrived as agreed only because a hold made the step run again. Each step writes the flag to `ledger.jsonl`.
+- Give `baseline_minutes` to `report`, or `--baseline-minutes` to `as-agreed`, as your time for a manual check of one run. Then the flag shows that time when no person must look at the run.
+- `as-agreed hook` reads a Claude Code `PreToolUse` input. It checks a tool call that `.as-agreed/binding.json` names against `.as-agreed/record.json`. It stops the call if a must term is missing or changed. It also stops the call if no person agreed to the record, or if the check cannot run.
+- The repository is also a Claude Code plugin, `as-agreed`, with a skill and the hook. The example `examples/plugin-hold/` has a record, a binding, and a tool call for each result: pass, `DROPPED` and `WIDENED`.
+- `docs/WORDLIST.md` adds the names hook, plugin, skill, binding, flag, Claude and Code.
+
 ## 0.0.3, 2026-11-07
 
 - `as-agreed import langsmith` reads LangSmith runs: a JSON list, the API data of `/runs/query`, one run with its `child_runs`, a `.jsonl` file, or a CSV file with the same column names. It orders the runs by `dotted_order`. The order is the input of the run whose `id` is the `trace_id`.

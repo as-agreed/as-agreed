@@ -1,0 +1,25 @@
+{
+ "order": "Pay the October invoice from Northwind Freight, up to 18,400 dollars. (invented example)",
+ "commitments": [
+  {
+   "commitment_id": "pay-invoice",
+   "act": "pay the October invoice from Northwind Freight",
+   "obligor": "finance-ops",
+   "obligee": "northwind-freight",
+   "modality": "MUST",
+   "limit": {
+    "amount": {
+     "max": 18400,
+     "unit": "USD"
+    }
+   },
+   "carried_by": {
+    "obligor": "payer",
+    "act": "act",
+    "limit.amount": "amount"
+   }
+  }
+ ],
+ "confirmed_by": "the person who gave the order",
+ "confirmed_at": "2026-11-15"
+}

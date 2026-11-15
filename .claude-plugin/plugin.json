@@ -1,0 +1,18 @@
+{
+  "name": "as-agreed",
+  "version": "0.1.0",
+  "description": "Checks a declared step's tool call against the agreed record a person confirmed, and stops the call when a binding term is missing or changed. Code only, no model, nothing leaves the machine.",
+  "author": {
+    "name": "BizBuilder, Inc.",
+    "url": "https://github.com/as-agreed"
+  },
+  "homepage": "https://github.com/as-agreed/as-agreed",
+  "repository": "https://github.com/as-agreed/as-agreed",
+  "license": "Apache-2.0",
+  "keywords": [
+    "agents",
+    "hand-off",
+    "commitments",
+    "hook"
+  ]
+}

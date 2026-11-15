@@ -1,13 +1,14 @@
 """The hold (SPEC §2.3): the policy, what holds, the DANGER lines, the codes."""
 from __future__ import annotations
 
+import re
 from collections import Counter, OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .check import Verdict
 from .commitment import FORMAT, AsAgreed, Claim
-from .drift import (ADDED_UNPARENTED, DROPPED, ESCALATED, NARROWED, RECONDITIONED, REASSIGNED, RESCHEDULED, STRENGTHENED,
+from .drift import (ADDED_UNPARENTED, DROPPED, ESCALATED, FAITHFUL, NARROWED, RECONDITIONED, REASSIGNED, RESCHEDULED, STRENGTHENED,
                     UNDECLARED, WEAKENED, WIDENED)
 from .match import marker_summary
 
@@ -158,3 +159,67 @@ def decide(verdicts: Iterable[Verdict], agreed: AsAgreed, policy: Policy, tier_f
              "tier 3": counts.get(3, 0)}
     code = 0 if passed or policy.on_loss != "hold" else 1
     return Hold(run_id, link_id, passed, code, attempt, policy.record(), lines, tiers, ts, pipeline)
+
+
+def _currency(bound: Any) -> Optional[Tuple[str, float]]:
+    """The agreed amount of a money bound, or None. shortcut: a unit counts as money only when it is an ISO-style
+    three-letter code (USD, EUR); add a unit table when a record states money another way."""
+    if not isinstance(bound, Mapping) or not re.fullmatch(r"[A-Z]{3}", str(bound.get("unit") or "")):
+        return None
+    for kind in ("max", "min"):
+        if isinstance(bound.get(kind), (int, float)) and not isinstance(bound.get(kind), bool):
+            return bound["unit"], float(bound[kind])
+    return None
+
+
+def _minutes(m: float) -> str:
+    h, mm = divmod(int(round(m)), 60)
+    return f"{h} h {mm} min" if h else f"{mm} min"
+
+
+def flag(rows: Iterable[Mapping[str, Any]], baseline_minutes: Optional[float] = None) -> List[str]:
+    """The run's flag (D-181, D-191), the verdict first and the value second, from the run's records.
+
+    Counted over the fields of the binding commitments (MUST, MUST_NOT), each at its last verdict in the run: kept
+    (PRESERVED or RESTATED), held (a change, or a loss), unchecked (code could not decide). A term counts as kept
+    because of the check when a step under the hold policy was held on it and the term arrived as agreed after.
+    Review time appears only against a baseline the user sets, in minutes of review per run."""
+    rows = list(rows)
+    caught = {h.get("link") for h in rows if h.get("kind") == "hold" and not h.get("passed")
+              and (h.get("policy") or {}).get("on_loss") == "hold"}
+    limits = {r.get("commitment_id"): r.get("limit") or {} for r in rows if r.get("kind") == "commitment"}
+    last: "OrderedDict[Tuple[str, str], Mapping[str, Any]]" = OrderedDict()
+    held_once = set()
+    for r in rows:
+        if r.get("kind") != "verdict" or r.get("unit_kind") != "commitment" or not r.get("must"):
+            continue
+        key = (r.get("unit"), r.get("field"))
+        last.pop(key, None)
+        last[key] = r
+        if r.get("link") in caught and r.get("drift_class") in CHANGES + LOSSES:
+            held_once.add(key)
+    if not last:
+        return ["Kept as agreed: no binding term was checked in this run"]
+    kept = [k for k, r in last.items() if r.get("drift_class") in FAITHFUL]
+    held = [r for r in last.values() if r.get("drift_class") in CHANGES + LOSSES]
+    open_ = [r for r in last.values() if not r.get("drift_class")]
+    where = " and ".join(sorted({"delivery" if r.get("state") == "as_delivered" else "a brief" for r in last.values()}))
+    detail = " (" + "; ".join(f"{r['unit']} {r['field']} {r['drift_class']}: {r.get('reason', '')}" for r in held) + ")"
+    lines = [f"Kept as agreed: {len(kept)} of {len(last)} binding terms, checked at {where}; "
+             f"{len(held)} held{detail if held else ''}; {len(open_)} unchecked"]
+    saved = [k for k in kept if k in held_once]
+    stake: Dict[str, float] = {}
+    for unit, field in saved:
+        money = _currency(limits.get(unit, {}).get(field.partition(".")[2])) if field.startswith("limit.") else None
+        if money:
+            stake[money[0]] = stake.get(money[0], 0.0) + money[1]
+    lines.append(f"{len(saved)} of {len(last)} terms kept that would have been lost"
+                 + ("".join(f", {v:,.0f} {c}" for c, v in sorted(stake.items())) + " at stake" if stake else ""))
+    if baseline_minutes is not None:
+        # shortcut: a run that held or left a term unchecked returns no review time; minutes per card come later
+        if held or open_:
+            lines.append(f"Review returned: none; {len(held) + len(open_)} terms wait for your read "
+                         f"(your baseline: {_minutes(baseline_minutes)} per run)")
+        else:
+            lines.append(f"Review returned: {_minutes(baseline_minutes)} (your baseline per run)")
+    return lines

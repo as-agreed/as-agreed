@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .commitment import FORMAT, MODALITIES, AsAgreed, Commitment
+from .due import Due
 from .drift import (ADDED_UNPARENTED, DRIFT_CLASSES, ESCALATED, FAITHFUL, NARROWED, PRESERVED, RECONDITIONED,
                     RESTATED, RESTORED_EQUIVALENT, RESTORED_VERBATIM, SITE_OF_LINK, WIDENED, Declared, Finding,
                     decide_value, read, safe_id)
@@ -243,15 +244,19 @@ def _ask(tier: Any, escalations: List[Escalation]) -> List[Any]:
 def check_link(outputs: Any, agreed: AsAgreed, *, run_id: str, link_id: str, ts: str, history: History,
                tiers: Iterable[Any] = (), pipeline: str = "default", delivered: bool = False,
                link_type: Optional[str] = None, first_changed: Optional[Mapping[str, Optional[str]]] = None,
-               on_missing_key: str = "dropped") -> Tuple[List[Verdict], List[dict]]:
+               on_missing_key: str = "dropped",
+               binding: Optional[Mapping[str, Any]] = None) -> Tuple[List[Verdict], List[dict]]:
     """Tier 1 on every declared field, the ledger on every claim, then the tiers on what stayed undecided.
+    With a `binding` (see `due.py`), only the commitments the step serves are read, and only for what it owes.
     Every reference is the as-agreed record; `history` only names what was lost, for the trajectory labels.
 
     `link_type` is this link's type and `first_changed` maps unit/field to the type of the earliest link where the
     field changed (D-25): a field tier 1 finds changed takes its site from that link's type, or from this link's when
     it changes here first; an untyped link gives site None with `site_undecided` ESCALATED."""
     state = "as_delivered" if delivered else "as_briefed"
-    declared = Declared(outputs, delivered=delivered, on_missing_key=on_missing_key)
+    due = Due(binding, agreed) if binding is not None else None
+    # under a binding a missing key is first read as not addressed; the due list then makes it DROPPED where owed
+    declared = Declared(outputs, delivered=delivered, on_missing_key="undeclared" if due else on_missing_key)
     ids = {c.commitment_id for c in agreed.commitments}
     verdicts: List[Verdict] = []
     failures: List[dict] = []
@@ -317,7 +322,10 @@ def check_link(outputs: Any, agreed: AsAgreed, *, run_id: str, link_id: str, ts:
 
     text = to_lines(outputs)
     for c in agreed.commitments:
-        for f in read(c, declared, ids):
+        if due is not None and c.commitment_id not in due.serves:
+            continue
+        found = read(c, declared, ids)
+        for f in (due.apply(c, found) if due is not None else found):
             v = commitment_verdict(c, f)
             verdicts.append(v)
             if f.drift_class is None:

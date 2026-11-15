@@ -18,9 +18,10 @@ from .check import Escalation, Tier2, Tier3, ValueReader, Verdict, check_link, f
 from .commitment import FORMAT, MODALITIES, AsAgreed, Claim, Commitment, Criterion, build, cut
 from .destination import Envelope, LocalDestination, RemoteDestination
 from .drift import MISSING_KEY_MODES, DRIFT_CLASSES, LINK_TYPES
+from .due import Due
 from .errors import (AsAgreedExists, AsAgreedError, DriftHold, EmptyAsAgreed, NoCommitment, SchemaError,
                      WorkflowContextError)
-from .hold import DEFAULT_FAIL_ON, Hold, Policy, decide
+from .hold import DEFAULT_FAIL_ON, Hold, Policy, decide, flag
 from .reason import (acall_with_reason, accepts_kw, call_with_reason, current_as_agreed, current_reason,
                      reset_current_as_agreed, reset_reason, set_current_as_agreed, set_reason)
 from .report import RecallRow, Report
@@ -32,7 +33,7 @@ __all__ = ["register", "step", "run", "check", "hold", "retry", "report", "Commi
            "Verdict", "Hold", "Outcome", "Tier2", "Tier3", "ValueReader", "Escalation", "RecallRow", "fidelity_score", "PlainAdapter",
            "memory_adapter", "LocalDestination", "RemoteDestination", "Envelope", "current_reason", "AsAgreedError",
            "NoCommitment", "AsAgreedExists", "EmptyAsAgreed",
-           "SchemaError", "DriftHold", "WorkflowContextError", "Policy", "MAX_RETRIES", "DRIFT_CLASSES", "MODALITIES"]
+           "SchemaError", "DriftHold", "WorkflowContextError", "Policy", "MAX_RETRIES", "DRIFT_CLASSES", "MODALITIES", "Due"]
 
 SCHEMA_TYPES = (float, int, str, bool, list, dict)
 
@@ -209,12 +210,14 @@ class _Execution:
     def __init__(self, fn: Callable, args: tuple, kwargs: dict, *, name: str, agreed: Optional[AsAgreed],
                  adapter: Optional[Adapter], commit_fn: Optional[Callable], schema: Optional[Dict[str, Any]],
                  policy: Policy, tiers: Tuple[Any, ...], hold_to: Optional[str], reads: Tuple[str, ...],
-                 writes: Tuple[str, ...], link_type: Optional[str] = None, on_missing_key: str = "dropped"):
+                 writes: Tuple[str, ...], link_type: Optional[str] = None, on_missing_key: str = "dropped",
+                 binding: Optional[Dict[str, Any]] = None):
         self.fn, self.args, self.kwargs = fn, args, kwargs
         self.name, self.schema, self.policy, self.tiers = name, schema, policy, tiers
         self.commit_fn, self.hold_to, self.reads, self.writes = commit_fn, hold_to, reads, writes
         self.link_type = link_type
         self.on_missing_key = on_missing_key
+        self.binding = binding
         cur = current_as_agreed()
         record = cur if cur is not None else agreed  # inside ab.run(), the run's as-agreed record wins
         ad = adapter or (getattr(record, "adapter", None) if record is not None else None)
@@ -261,12 +264,13 @@ class _Execution:
                   "role": pol.role, "state": "as_delivered" if delivered else "as_briefed",
                   "link_type": self.link_type, "text": text,
                   "inputs_hash": self.inputs_hash, "idempotency_key": self.key, "reads": list(self.reads),
-                  "writes": list(self.writes), "ts": ts})
+                  "writes": list(self.writes), "ts": ts,
+                  **({"binding": dict(self.binding)} if self.binding is not None else {})})
         history = self.ad.history(ctx.run_id)
         verdicts, failures = check_link(outputs, agreed, run_id=ctx.run_id, link_id=lid, ts=ts, history=history,
                                         tiers=self.tiers, pipeline=ctx.pipeline, delivered=delivered,
                                         link_type=self.link_type, first_changed=self.ad.first_changed(ctx.run_id),
-                                        on_missing_key=self.on_missing_key)
+                                        on_missing_key=self.on_missing_key, binding=self.binding)
         for v in verdicts:
             self.rec(v.record())
         for f in failures:
@@ -274,6 +278,8 @@ class _Execution:
         h = decide(verdicts, agreed, pol, failures, run_id=ctx.run_id, link_id=lid, attempt=self.attempt, ts=ts,
                    pipeline=ctx.pipeline)
         self.rec(h.record())
+        self.rec({"kind": "flag", "format": FORMAT, "pipeline": ctx.pipeline, "run_id": ctx.run_id, "link": lid,
+                  "lines": flag(self.ad.records(ctx.run_id)), "ts": ts})
         outcome = Outcome(h.passed, h.code, outputs, [v.record() for v in verdicts], list(h.lines), self.attempt,
                           self.key, list(self.records), lid)
         ctx.outcome = outcome
@@ -328,11 +334,14 @@ def step(name: str, agreed: Optional[AsAgreed] = None, *, commit: Any = None, sc
          retries: int = 1, on_loss: Optional[str] = None, fail_on: Tuple[str, ...] = DEFAULT_FAIL_ON,
          on_undecided: Optional[str] = None, tiers: Iterable[Any] = (), hold_to: Optional[str] = None,
          reads: Iterable[str] = (), writes: Iterable[str] = (), adapter: Optional[Adapter] = None,
-         link_type: Optional[str] = None, on_missing_key: str = "dropped") -> Callable:
+         link_type: Optional[str] = None, on_missing_key: str = "dropped",
+         binding: Optional[Dict[str, Any]] = None) -> Callable:
     """Wrap one step: compare what it declares with the as-agreed record, hold a commit where a field drifted, retry
     with the reason. `link_type` (schema-write, step, compression, delivery) names the site of a change first seen
     here (D-25); an untyped step leaves the site to a reader. `on_missing_key="undeclared"` reads a carried key the
-    step's outputs do not hold as not addressed (UNDECLARED) rather than DROPPED (SPEC §1.2, draft 8)."""
+    step's outputs do not hold as not addressed (UNDECLARED) rather than DROPPED (SPEC §1.2, draft 8). `binding`
+    ({"serves": [...], "kind": "sets_terms" | "takes_effect" | "mentions", "author", "recipient"}) names what the
+    step owes: only the commitments it serves are read, and an owed key it does not deliver is DROPPED (0.1.0)."""
     if link_type is not None and link_type not in LINK_TYPES:
         raise ValueError(f"link_type {link_type!r} is not one of {', '.join(LINK_TYPES)}")
     if on_missing_key not in MISSING_KEY_MODES:
@@ -362,7 +371,7 @@ def step(name: str, agreed: Optional[AsAgreed] = None, *, commit: Any = None, sc
                     on_undecided or ("hold" if is_commit else "record"))
     opts = dict(name=name, agreed=agreed, adapter=adapter, commit_fn=commit_fn, schema=schema, policy=policy,
                 tiers=tiers, hold_to=hold_to, reads=tuple(reads), writes=tuple(writes), link_type=link_type,
-                on_missing_key=on_missing_key)
+                on_missing_key=on_missing_key, binding=binding)
 
     def deco(fn: Callable) -> Callable:
         if inspect.iscoroutinefunction(fn):
@@ -384,7 +393,8 @@ def step(name: str, agreed: Optional[AsAgreed] = None, *, commit: Any = None, sc
 # ---------- the verbs as functions ----------
 def check(outputs: Any, agreed: AsAgreed, *, link: str = "check#1@1", tiers: Iterable[Any] = (),
           history: Any = None, delivered: bool = False, adapter: Optional[Adapter] = None,
-          link_type: Optional[str] = None, on_missing_key: str = "dropped") -> List[Verdict]:
+          link_type: Optional[str] = None, on_missing_key: str = "dropped",
+          binding: Optional[Dict[str, Any]] = None) -> List[Verdict]:
     """Reconcile one link against the as-agreed record as a dry run (SPEC §2.2): the verdicts come back and nothing
     is recorded; the decorator and `reconcile` are the recording paths.
 
@@ -404,7 +414,8 @@ def check(outputs: Any, agreed: AsAgreed, *, link: str = "check#1@1", tiers: Ite
         raise ValueError(f"link_type {link_type!r} is not one of {', '.join(LINK_TYPES)}")
     verdicts, _ = check_link(outputs, agreed, run_id=ad.run_id, link_id=link, ts=ad.clock(), history=hist, tiers=tiers,
                              pipeline=ad.pipeline, delivered=delivered, link_type=link_type,
-                             first_changed=ad.first_changed(ad.run_id), on_missing_key=on_missing_key)
+                             first_changed=ad.first_changed(ad.run_id), on_missing_key=on_missing_key,
+                             binding=binding)
     return verdicts
 
 
@@ -429,7 +440,7 @@ def retry(fn: Callable, args: tuple = (), kwargs: Optional[dict] = None, *, reas
 
 def report(agreed_or_adapter: Any, out_dir: Optional[str] = None, *, title: str = "", per_unit: bool = True,
            quiet: bool = False, recall: Iterable[RecallRow] = (), values: bool = False,
-           expand_claims: bool = False) -> Report:
+           expand_claims: bool = False, baseline_minutes: Optional[float] = None) -> Report:
     """ledger.jsonl, counts.csv, flow.svg, and the printed lines of SPEC §2.5 (quiet=True writes without printing).
     The map is in its shared form unless asked (SPEC §7): `expand_claims=True` draws one ribbon per claim instead of one
     band per link, `values=True` puts the agreed and arrived values on it, so that file is not for sending."""
@@ -438,6 +449,7 @@ def report(agreed_or_adapter: Any, out_dir: Optional[str] = None, *, title: str 
         raise NoCommitment("nothing to report: pass a registered as-agreed record or an adapter")
     out = out_dir or getattr(ad, "run_dir", ".")
     rep = build_report(ad.records(ad.run_id), out, title=title, run_id=ad.run_id, recall=recall, values=values,
+                       baseline_minutes=baseline_minutes,
                        expand_claims=expand_claims)
     if not quiet:
         print(rep.text(per_unit))

@@ -112,6 +112,13 @@ it, what, under, line
 | Inc | part of the name BizBuilder, Inc. |
 | sign-off | a line in a change that says that you wrote it and can send it |
 | agent | a program that uses a model to do the work of one or more steps |
+| hook | a command that an agent tool runs before each tool call; the As-Agreed hook can stop the call |
+| plugin | a set of files that adds a skill and a hook to an agent tool |
+| skill | a file of instructions that an agent reads before a task |
+| binding | the file that tells which tool calls are steps, and which commitments each step must have |
+| Claude | part of the name Claude Code |
+| Code | part of the name Claude Code, the agent tool of Anthropic |
+| flag | the lines after each run that tell how many must terms arrived as agreed |
 | agents | more than one agent |
 | multi-agent | with more than one agent, where agents give work to agents |
 | hand-off | the point where one step gives its output to the next step |

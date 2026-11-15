@@ -176,7 +176,8 @@ def links_to_run(links: Sequence[Link], *, root_input: str, adapter: Optional[Pl
 
 def run_folder(folder: str, *, adapter: Optional[PlainAdapter] = None, fail_on: Tuple[str, ...] = DEFAULT_FAIL_ON,
                on_undecided: Optional[str] = None, min_words: int = 3, out_dir: Optional[str] = None, retries: int = 0,
-               title: str = "", quiet: bool = False, on_missing_key: str = "dropped") -> int:
+               title: str = "", quiet: bool = False, on_missing_key: str = "dropped",
+               baseline_minutes: Optional[float] = None) -> int:
     """A folder of ordered stage files: the first is the order, every later file one link, the one with the highest
     numeric prefix the commit. `commitments.json` declares the as-agreed commitments; a same-stem `.json` declares
     a stage's fields, and a prefixed `.json` with no prose beside it is a stage of its own (`stage_files`)."""
@@ -214,7 +215,8 @@ def run_folder(folder: str, *, adapter: Optional[PlainAdapter] = None, fail_on: 
         except SchemaError as e:  # the commit was withheld; the report carries the code, not a traceback
             print(f"{e}", file=sys.stderr)
         previous = outputs
-    rep = build(ad.records(), out, title=title or f"Where did the commitments go? {os.path.basename(folder)}", run_id=ad.run_id)
+    rep = build(ad.records(), out, title=title or f"Where did the commitments go? {os.path.basename(folder)}", run_id=ad.run_id,
+                baseline_minutes=baseline_minutes)
     if not quiet:
         print(rep.text())
     if not agreed.commitments:  # nothing was compared against a commitment: a green run here would be a pass nobody earned
