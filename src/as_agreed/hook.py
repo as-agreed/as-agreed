@@ -1,8 +1,10 @@
-"""`as-agreed hook`: the agent plugin's check before a step takes effect (0.1.0).
+"""`as-agreed hook`: the agent plugin's check before a step takes effect (0.1.0; the record's lookup 0.1.1).
 
-Claude Code runs it before each tool call (PreToolUse) and passes the call as JSON on stdin. The project keeps two
-files in `.as-agreed/`: `record.json`, the agreed record, and `binding.json`, which tool calls are steps and what each
-owes:
+Claude Code runs it before each tool call (PreToolUse) and passes the call as JSON on stdin. The record is two files
+in one folder: `record.json`, the agreed record, and `binding.json`, which tool calls are steps and what each owes.
+The folder is the project's `.as-agreed/`, or, for an agent started in a throwaway folder (a Multica task folder, CI,
+a cloud workdir), the one `AS_AGREED_RECORD` or a `.as-agreed-record` pointer names (`locate.py`). A named folder that
+is missing or cannot be read denies every call, with the reason. The two files:
 
     record.json   {"order": "...", "commitments": [...], "confirmed_by": "<who confirmed it>", "confirmed_at": "..."}
     binding.json  {"steps": [{"tool": "Write", "path": "*/outbox/*.json", "json": "content",
@@ -15,12 +17,13 @@ otherwise the tool's input is the output. A call no step names is not checked.
 
 A step is denied when a term changed or a binding term is lost (decided by code), when the record is not confirmed,
 or when the check cannot run; what code cannot decide passes. A file tool may not set `confirmed_by`: the person
-writes it by hand. Once it is set, file tools may not change `record.json` or `binding.json`. While either file is
-unreadable, file tools may still repair it. Each checked call is logged to `.as-agreed/hook.jsonl` by tool, decision
-and the unit, field and class of what was held; never a value of the call. The check's rows, values included, go to
-`.as-agreed/runs/<session>/ledger.jsonl`, with the band's `band.json` and the Board page `board.html` beside it
-(`band.py`); `runs/` holds a `.gitignore`, so they stay out of the project's commits, and nothing in it is sent
-anywhere. Nothing here opens a network connection.
+writes it by hand. Once it is set, file tools may not change `record.json` or `binding.json`, and, for a record found
+through the variable or a pointer, may not write a pointer in the start folder or a parent, or the start folder's
+`.as-agreed/` files, which the lookup reads first. While either file is unreadable, file tools may still repair it.
+Each checked call is logged to `hook.jsonl` in the record's folder by tool, decision and the unit, field and class of
+what was held; never a value of the call. The check's rows, values included, go to `runs/<session>/ledger.jsonl`
+beside the record, with the band's `band.json` and the Board page `board.html` (`band.py`); `runs/` holds a
+`.gitignore`, so they stay out of commits, and nothing in it is sent anywhere. Nothing here opens a network connection.
 """
 from __future__ import annotations
 
@@ -30,9 +33,11 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
-FOLDER = ".as-agreed"
+from .locate import ENV, FOLDER, POINTER, Located, locate, parents
+
 FILES = ("record.json", "binding.json")
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 
@@ -44,15 +49,53 @@ def _path(tool_input: Dict[str, Any], root: str) -> str:
     return os.path.normpath(raw if os.path.isabs(raw) else os.path.join(root, raw)) if raw else ""
 
 
-def _aims_at_folder(tool: str, path: str, root: str) -> Optional[str]:
-    """Which of the two files a file tool aims at, or None."""
+def _fold(name: str) -> str:
+    """A name as a case-insensitive, normalisation-insensitive disk (APFS) compares it: one Unicode form, no case."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def _anchor(path: str) -> Tuple[str, Tuple[str, ...]]:
+    """The deepest folder or file of `path` that exists, and the folded names below it that do not exist yet."""
+    tail: List[str] = []
+    while not os.path.exists(path) and os.path.dirname(path) != path:
+        tail.append(_fold(os.path.basename(path)))
+        path = os.path.dirname(path)
+    return path, tuple(reversed(tail))
+
+
+def _same(path: str, target: str) -> bool:
+    """One file, made or not yet: the part of each path that exists is the same folder or file on disk (links,
+    case and Unicode form resolved by the disk itself), and the names below it fold to the same."""
+    if os.path.normcase(path) == os.path.normcase(os.path.normpath(target)):
+        return True
+    (a, below_a), (b, below_b) = _anchor(path), _anchor(target)
+    try:
+        return below_a == below_b and os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def _aims_at_folder(tool: str, path: str, folder: str) -> Optional[str]:
+    """Which of the record's two files in `folder` a file tool aims at, or None."""
     if tool not in WRITE_TOOLS or not path:
         return None
     for name in FILES:
-        target = os.path.join(root, FOLDER, name)
-        same = os.path.exists(path) and os.path.exists(target) and os.path.samefile(path, target)
-        if same or os.path.normcase(path) == os.path.normcase(os.path.normpath(target)):
+        if _same(path, os.path.join(folder, name)):
             return name
+    return None
+
+
+def _shadows(tool: str, path: str, found: Located) -> Optional[str]:
+    """For a record found through the variable or a pointer: the lookup file a file tool would write ahead of it (the
+    start folder's `.as-agreed/` files, or a pointer in the start folder or a parent, the found one among them)."""
+    if tool not in WRITE_TOOLS or not path or found.how not in ("env", "pointer"):
+        return None
+    for name in FILES:
+        if _same(path, os.path.join(found.start, FOLDER, name)):
+            return f"{FOLDER}/{name} in the start folder"
+    if (found.pointer and _same(path, found.pointer)) or (_fold(os.path.basename(path)) == POINTER and any(
+            _same(os.path.dirname(path), d) for d in parents(found.start))):
+        return f"the pointer {path}"
     return None
 
 
@@ -73,8 +116,8 @@ def _sets_confirmed(tool_input: Dict[str, Any]) -> bool:
     return False
 
 
-def _load(root: str, name: str) -> Any:
-    with open(os.path.join(root, FOLDER, name), encoding="utf-8") as f:
+def _load(folder: str, name: str) -> Any:
+    with open(os.path.join(folder, name), encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -111,44 +154,52 @@ def _with_arrived(rows: List[Dict[str, Any]], outputs: Dict[str, Any]) -> List[D
     return out
 
 
-def decide(event: Dict[str, Any], root: str, call: int = 1,
-           rows_out: Optional[List[Dict[str, Any]]] = None) -> Tuple[str, List[str], List[str]]:
+def decide(event: Dict[str, Any], root: str, call: int = 1, rows_out: Optional[List[Dict[str, Any]]] = None,
+           found: Optional[Located] = None) -> Tuple[str, List[str], List[str]]:
     """('unbound' | 'pass' | 'hold' | 'refused', lines, held) for one PreToolUse event in project `root`.
 
     `call` numbers the checked calls of one session, so each is its own link of the task's run; `rows_out`, when
-    given, receives the check's rows, each commitment verdict with the value that arrived at its carried key."""
+    given, receives the check's rows, each commitment verdict with the value that arrived at its carried key; `found`
+    is where the record is (`locate.py`), the project's `.as-agreed/` when not given."""
+    found = found or Located("project", os.path.abspath(root), os.path.join(root, FOLDER))
+    folder = str(found.folder)
+    where = f"{FOLDER}/" if found.how == "project" else os.path.join(folder, "")
     tool = str(event.get("tool_name", ""))
     tool_input = event.get("tool_input") or {}
     path = _path(tool_input, root)
-    aimed = _aims_at_folder(tool, path, root)
+    aimed = _aims_at_folder(tool, path, folder)
     try:
-        rec = _load(root, "record.json")
+        rec = _load(folder, "record.json")
         confirmed = isinstance(rec, dict) and bool(str(rec.get("confirmed_by") or "").strip())
     except (OSError, ValueError):
         rec, confirmed = None, False
     if aimed and _sets_confirmed(tool_input):
-        return "refused", [f"as-agreed: only the person writes confirmed_by in {FOLDER}/record.json, by hand, after "
+        return "refused", [f"as-agreed: only the person writes confirmed_by in {where}record.json, by hand, after "
                            f"reading the record and the binding"], []
     if aimed and confirmed:
-        return "refused", [f"as-agreed: the confirmed record and binding in {FOLDER}/ are frozen; a change needs the "
+        return "refused", [f"as-agreed: the confirmed record and binding in {where} are frozen; a change needs the "
                            f"person: they clear confirmed_by by hand, then confirm the new version"], []
     if aimed:
         return "unbound", [], []  # drafting or repairing the two files before the person confirms them
+    shadow = _shadows(tool, path, found) if confirmed else None
+    if shadow:
+        return "refused", [f"as-agreed: the confirmed record in {where} is frozen, and so is the way to it: a file "
+                           f"tool may not write {shadow}, which the lookup reads first; a change needs the person"], []
     try:
-        conf = _load(root, "binding.json")
+        conf = _load(folder, "binding.json")
         step = _step(conf.get("steps") or [], tool, path)
     except (OSError, ValueError, AttributeError) as e:
-        return "refused", [f"as-agreed: {FOLDER}/binding.json cannot be read ({type(e).__name__}); repair it "
+        return "refused", [f"as-agreed: {where}binding.json cannot be read ({type(e).__name__}); repair it "
                            f"with a file tool"], []
     if step is None:
         return "unbound", [], []
     if not confirmed:
-        return "refused", [f"as-agreed: the agreed record in {FOLDER}/record.json is not confirmed by a person; show "
+        return "refused", [f"as-agreed: the agreed record in {where}record.json is not confirmed by a person; show "
                            f"them the record and the binding, and let them write confirmed_by by hand"], []
     import as_agreed.sdk as ab
     from .hold import Policy, flag
     agreed = ab.register(str(rec.get("order") or ""), [ab.Commitment.from_mapping(c) for c in rec["commitments"]],
-                         adapter=ab.memory_adapter(), source=f"{FOLDER}/record.json")
+                         adapter=ab.memory_adapter(), source=f"{where}record.json")
     binding = step.get("binding") or {}
     link = f"{tool}#{call}@1"
     outputs = _outputs(step, tool_input)
@@ -169,30 +220,47 @@ def decide(event: Dict[str, Any], root: str, call: int = 1,
     return "hold", list(h.lines) + lines[:1] + lines[2:], held
 
 
+def _deny(lines: List[str]) -> None:
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                             "permissionDecisionReason": "\n".join(lines)}}))
+
+
 def main(stdin: str) -> int:
     """Claude Code's PreToolUse contract: JSON with a deny decision on stdout stops the call; nothing lets it run.
     The decision is printed before anything is logged, so a log that cannot be written never lets a step through."""
-    root = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
-    if not os.path.isfile(os.path.join(root, FOLDER, "binding.json")):
+    try:
+        found = locate(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    except Exception as e:  # noqa: BLE001 (a lookup that fails must stop the call, never let it through)
+        print(f"as-agreed could not find the record: {type(e).__name__}: {' '.join(str(e).split())}", file=sys.stderr)
+        return 2
+    if found.how == "none":
         return 0
+    if found.error:  # the person named a record that cannot be used: no call runs unchecked
+        _deny([f"as-agreed: {found.error}. No call runs until it names the folder that holds the confirmed "
+               f"record.json and binding.json, or {ENV} is unset and the pointer removed."])
+        sys.stdout.flush()
+        return 0
+    root, folder = found.start, str(found.folder)
+    record = None if found.how == "project" else folder  # the band's run folder: beside the record
     try:
         event = json.loads(stdin or "{}")
         from . import band
         rows: List[Dict[str, Any]] = []
-        decision, lines, held = decide(event, root, band.calls(root, event.get("session_id")) + 1, rows)
+        decision, lines, held = decide(event, root, band.calls(root, event.get("session_id"), record=record) + 1,
+                                       rows, found=found)
     except Exception as e:  # a call in a project that declared steps, and that cannot be checked, does not run
         print(f"as-agreed could not check this call: {type(e).__name__}: {' '.join(str(e).split())}", file=sys.stderr)
         return 2
     if decision in ("hold", "refused"):
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                                 "permissionDecisionReason": "\n".join(lines)}}))
+        _deny(lines)
     elif decision == "pass":
         print(json.dumps({"systemMessage": "as-agreed: " + lines[0]}))
     sys.stdout.flush()
     if decision == "unbound":
         return 0
-    try:
-        with open(os.path.join(root, FOLDER, "hook.jsonl"), "a", encoding="utf-8") as f:
+    try:  # never through a link or into a FIFO planted at the log's name (security review of ASAG-34, finding 3)
+        fd = band._own_file(None, os.path.join(folder, "hook.jsonl"), os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                                 "session": event.get("session_id"), "tool": event.get("tool_name"),
                                 "decision": decision, "held": held}) + "\n")
@@ -200,7 +268,7 @@ def main(stdin: str) -> int:
         pass  # the decision is already given; a log that cannot be written changes nothing
     if rows:
         try:
-            band.write_run(root, event.get("session_id"), rows)
+            band.write_run(root, event.get("session_id"), rows, record=record)
         except Exception:  # noqa: BLE001 (any failure here must leave the exit code 0, or the deny above is dropped)
             pass
     return 0
