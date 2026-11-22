@@ -2,10 +2,10 @@
 
 ## Unreleased
 
-- In Claude Code, the plugin shows a band above the prompt. It counts the binding terms of the task: the terms kept as agreed, the terms held, and the terms that code cannot check. It also counts a term that changed and that no hold stopped, but only when there is one. These are the counts of the flag.
+- In Claude Code, the plugin shows a band above the prompt. It counts the binding terms of the task. It shows the terms kept as agreed, the terms held, and the terms that code cannot check. It also counts a term that changed and that no hold stopped, but only when there is one. These are the counts of the flag.
 - The band has a button, Board. It opens a page on your machine. The page lists each binding term of the task: what was agreed, what arrived, and the result. It marks each term that was lost. The page loads nothing and sends nothing.
 - The hook writes the records of each check to `.as-agreed/runs/<session>/ledger.jsonl`, with `band.json` and `board.html` next to it. These files hold the values of the calls. A `.gitignore` in `runs/` keeps them out of your commits.
-- The hook gives each checked call of a session its own link: `Write#2@1` is the second call. Thus a call that a hold stopped, and that then runs again with the agreed value, counts as a term kept because of the check.
+- The hook gives each checked call of a session its own link: `Write#2@1` is the second call. A hold may stop a call, and the call may then run again with the agreed value. The term then counts as kept because of the check.
 - `as-agreed band <ledger.jsonl>` prints the band of any run as JSON. With `--board <file>`, it also writes the page.
 - The band needs Claude Code 2.1.290 or later, in the terminal or the desktop app.
 
