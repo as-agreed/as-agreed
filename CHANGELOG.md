@@ -4,7 +4,7 @@
 
 - In the field check, a declared value in English number words counts as its number. "three" is 3, and "two hundred and seventy-one" is 271. A string of digits stays text, as before.
 - `as_agreed.quantity.figures(text)` lists the figures that a text gives, in digits and in words. A gate can use it to fill a field from a draft. `figures("well over three hundred commitments")` gives `[300]`.
-- Ordinals, fractions and "a dozen" are not read as numbers.
+- In the field check, a value such as "first", "one half" or "a dozen" is not read as a number.
 - `docs/FIRST-RUN.md` gives four steps to the Board: get the code, run the example, see the band, open the Board.
 - In Claude Code, the plugin shows a band above the prompt. It counts the binding terms of the task. It shows the terms kept as agreed, the terms held, and the terms that code cannot check. It also counts a term that changed and that no hold stopped, but only when there is one. These are the counts of the flag.
 - The band has a button, Board. When you click it, it makes a new page on your machine and opens it. The page lists each binding term of the task: what was agreed, what arrived, and the result. It marks each term that was lost. The page loads nothing and sends nothing.
