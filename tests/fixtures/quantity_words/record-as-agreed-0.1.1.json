@@ -1,0 +1,187 @@
+{
+ "_doc": "Invented for X64: a release record of As-Agreed as the release worker would hand it to the gate. No value here is real.",
+ "release_id": "as-agreed-0.1.1",
+ "status": "confirmed, not yet published",
+ "order": "Release As-Agreed 0.1.1: publish it to PyPI, label the issues it closes, add its line to the landing timeline, draft its posts (invented for X64)",
+ "confirmed_by": "the owner",
+ "confirmed_at": "2026-11-19",
+ "facts": {
+  "version": "0.1.1",
+  "commit": "a13dfc669403b70a9aedea0b8e710adbf959bbc1",
+  "tag": "v0.1.1",
+  "wheel_sha256": "af297541ba2f1839b3b6a772b32ab2592d9ffd2806036f826facdc9bb92c6ccc",
+  "sdist_sha256": "d429f3349ef6592ff3723c6781275222094bf61c9a235c2ddd333d29ff65ebd4",
+  "gate_hash": "sha256:1f995086cfd8d83761345ba4beb7a75f1dee14fa0983e9ba65c295a8a9fcd61d",
+  "date": "2026-11-21",
+  "link": "https://github.com/as-agreed/as-agreed/releases/tag/v0.1.1",
+  "closes_issues": [
+   12,
+   15
+  ],
+  "label": "released-0.1.1",
+  "figures": [
+   "271",
+   "3.9",
+   "3.14",
+   "9 of 10"
+  ],
+  "draft_channels": [
+   "x",
+   "linkedin",
+   "peer"
+  ]
+ },
+ "commitments": [
+  {
+   "commitment_id": "publish",
+   "act": "publish as-agreed 0.1.1 to PyPI",
+   "obligor": "release-worker",
+   "obligee": "pypi:as-agreed",
+   "modality": "MUST",
+   "condition": {
+    "version": "0.1.1",
+    "commit": "a13dfc669403b70a9aedea0b8e710adbf959bbc1",
+    "tag": "v0.1.1"
+   },
+   "acceptance_criteria": [
+    {
+     "criterion_id": "gate",
+     "text": "the release gate passed on this commit; its log hash is recorded",
+     "verification": "machine_checkable",
+     "field": "gate_hash",
+     "equals": "sha256:1f995086cfd8d83761345ba4beb7a75f1dee14fa0983e9ba65c295a8a9fcd61d"
+    },
+    {
+     "criterion_id": "wheel",
+     "text": "the wheel published is the wheel the gate installed offline",
+     "verification": "machine_checkable",
+     "field": "wheel_sha256",
+     "equals": "af297541ba2f1839b3b6a772b32ab2592d9ffd2806036f826facdc9bb92c6ccc"
+    },
+    {
+     "criterion_id": "sdist",
+     "text": "the source archive published is the one the gate built",
+     "verification": "machine_checkable",
+     "field": "sdist_sha256",
+     "equals": "d429f3349ef6592ff3723c6781275222094bf61c9a235c2ddd333d29ff65ebd4"
+    }
+   ],
+   "carried_by": {
+    "obligor": "actor",
+    "obligee": "target",
+    "condition.version": "version",
+    "condition.commit": "commit",
+    "condition.tag": "tag"
+   }
+  },
+  {
+   "commitment_id": "label",
+   "act": "label the issues 0.1.1 closes",
+   "obligor": "release-worker",
+   "obligee": "github:as-agreed",
+   "modality": "MAY",
+   "condition": {
+    "label": "released-0.1.1"
+   },
+   "limit": {
+    "issue": {
+     "in": [
+      12,
+      15
+     ]
+    }
+   },
+   "carried_by": {
+    "obligor": "actor",
+    "obligee": "target",
+    "condition.label": "label",
+    "limit.issue": "issue"
+   }
+  },
+  {
+   "commitment_id": "timeline",
+   "act": "add the line of 0.1.1 to the landing timeline",
+   "obligor": "release-worker",
+   "obligee": "site:asagreed.dev",
+   "modality": "MUST",
+   "condition": {
+    "version": "0.1.1",
+    "date": "2026-11-21",
+    "link": "https://github.com/as-agreed/as-agreed/releases/tag/v0.1.1"
+   },
+   "limit": {
+    "text_figures": {
+     "in": [
+      "0.1.1",
+      "2026-11-21",
+      "271",
+      "3.14",
+      "3.9",
+      "9 of 10",
+      "none"
+     ]
+    },
+    "text_links": {
+     "in": [
+      "https://github.com/as-agreed/as-agreed/releases/tag/v0.1.1",
+      "none"
+     ]
+    }
+   },
+   "carried_by": {
+    "obligor": "actor",
+    "obligee": "target",
+    "condition.version": "version",
+    "condition.date": "date",
+    "condition.link": "link",
+    "limit.text_figures": "text_figures",
+    "limit.text_links": "text_links"
+   }
+  },
+  {
+   "commitment_id": "draft",
+   "act": "draft the posts and review requests of 0.1.1",
+   "obligor": "release-worker",
+   "obligee": "outbox",
+   "modality": "MUST",
+   "condition": {
+    "version": "0.1.1",
+    "link": "https://github.com/as-agreed/as-agreed/releases/tag/v0.1.1"
+   },
+   "limit": {
+    "channel": {
+     "in": [
+      "x",
+      "linkedin",
+      "peer"
+     ]
+    },
+    "text_figures": {
+     "in": [
+      "0.1.1",
+      "2026-11-21",
+      "271",
+      "3.14",
+      "3.9",
+      "9 of 10",
+      "none"
+     ]
+    },
+    "text_links": {
+     "in": [
+      "https://github.com/as-agreed/as-agreed/releases/tag/v0.1.1",
+      "none"
+     ]
+    }
+   },
+   "carried_by": {
+    "obligor": "actor",
+    "condition.version": "version",
+    "condition.link": "link",
+    "limit.channel": "channel",
+    "limit.text_figures": "text_figures",
+    "limit.text_links": "text_links"
+   }
+  }
+ ]
+}
