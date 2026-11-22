@@ -191,7 +191,10 @@ def _value_parts(path: str, value: Any) -> Tuple[List[float], List[Tuple[int, in
 
 
 def _show_number(n: float) -> str:
-    return f"{int(n):,}" if n.is_integer() else f"{n:,}"
+    """A number as a person reads it; no separator below 10,000, so a year reads 2026, not 2,026."""
+    if n.is_integer():
+        return f"{int(n):,}" if abs(n) >= 10000 else str(int(n))
+    return f"{n:,}" if abs(n) >= 10000 else str(n)
 
 
 def _term_marks(unit: str, path: str, value: Any, words: Optional[str]) -> List[Mark]:

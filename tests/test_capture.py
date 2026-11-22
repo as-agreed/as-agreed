@@ -141,6 +141,14 @@ class TheMarks(unittest.TestCase):
     def test_a_name_with_no_words_is_shown_but_not_marked(self):
         self.assertEqual(self.change("book-offsite", obligee=None), [])  # the words for obligee removed
 
+    def test_a_year_in_a_mark_reads_as_a_year(self):
+        rec = load(TWELVE)
+        c = next(c for c in rec["commitments"] if c["commitment_id"] == "compost")
+        c["limit"] = {"season": {"in": [2026]}}
+        c["said"]["limit.season"] = "Plan the garden season"
+        text = [m.text for m in capture.marks(rec) if m.path == "limit.season"]
+        self.assertEqual(text, ["its words give no number for 2026"])
+
     def test_a_record_with_no_said_marks_each_number_and_date(self):
         rec = load(PLUGIN_HOLD / ".as-agreed" / "record.json")
         self.assertEqual(found(rec), [("pay-invoice", "limit.amount", NO_WORDS)])
