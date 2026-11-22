@@ -99,7 +99,7 @@ Kept as agreed: 0 of 1 binding terms, checked at delivery; 1 held (pay-invoice l
 Not checked by code: 4 untyped fields of binding terms (obligor, obligee, act, modality), declared at no link
 ```
 
-The first line counts the declared fields of the `MUST` and `MUST_NOT` commitments. It names each field that a hold stops, and each field that changed with no hold. The last step holds a field that an earlier step lost when no hold stopped it there, also if a later step gives it back. The next line counts the fields that arrive as agreed only because a hold made the step run again. It also gives the total of their agreed limits that have a unit such as `USD`. Each step also writes these lines to `ledger.jsonl`.
+The first line counts the declared fields of the `MUST` and `MUST_NOT` commitments. It names each field that a hold stops, and each field that changed with no hold. A step can lose a field when no hold stops it there. Then the last step holds the field, also if a later step gives it back. The next line counts the fields that arrive as agreed only because a hold made the step run again. It also gives the total of their agreed limits that have a unit such as `USD`. Each step also writes these lines to `ledger.jsonl`.
 
 Code does not check the fields `obligor`, `obligee`, `act` and `modality` when no step declares them. The flag counts them on a line of their own. A term in words only, with no field that code can check, is on the line "Terms not restated, untyped". A `MUST` or `MUST_NOT` term on that line is held. A `SHOULD` or `MAY` term on that line is listed, and it is not held.
 
