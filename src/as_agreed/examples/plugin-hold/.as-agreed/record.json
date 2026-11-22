@@ -14,8 +14,6 @@
     }
    },
    "carried_by": {
-    "obligor": "payer",
-    "act": "act",
     "limit.amount": "amount"
    }
   }

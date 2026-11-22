@@ -5,8 +5,10 @@ This page has four steps. They start from the package and end on the Board.
 ## 1. Install the package
 
 ```
-pip install as-agreed
+python3 -m pip install as-agreed
 ```
+
+If the shell does not find `as-agreed`, use `python3 -m as_agreed` in place of `as-agreed`.
 
 You must have Python 3.9 or higher. You do not use an account. The code does not use the network.
 
@@ -29,7 +31,7 @@ as-agreed band .as-agreed/runs/example/ledger.jsonl
 The output is JSON. It starts with the labels of the band:
 
 ```
-{"labels": ["Kept as agreed 2 of 3", "held 1", "unchecked 0"], "terms": 3, ...
+{"labels": ["Kept as agreed 0 of 1", "held 1", "unchecked 0"], "terms": 1, ...
 ```
 
 In Claude Code, the band shows these three labels above the prompt. You do not run this command there.

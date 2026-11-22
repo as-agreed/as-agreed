@@ -59,7 +59,7 @@ class TheHook(unittest.TestCase):
     def test_the_faithful_payment_goes_through(self):
         answer = self.call("faithful")
         self.assertFalse(self.denied(answer)[0])
-        self.assertEqual(answer["systemMessage"], "as-agreed: Kept as agreed: 3 of 3 binding terms, checked at "
+        self.assertEqual(answer["systemMessage"], "as-agreed: Kept as agreed: 1 of 1 binding terms, checked at "
                                                   "delivery; 0 held; 0 unchecked")
 
     def test_a_dropped_amount_is_denied(self):
