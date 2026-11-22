@@ -99,9 +99,10 @@ class TheSkill(unittest.TestCase):
 
 class ThePackagedExamples(unittest.TestCase):
     def test_every_record_is_read(self):
-        """plugin-hold, planted-failure and planted-widened, in the repository and in the package: six records."""
+        """plugin-hold, planted-failure, planted-widened and capture (0.1.3), in the repository and in the package:
+        eight records."""
         names = sorted(str(p.relative_to(ROOT)) for p in records())
-        self.assertEqual(len(names), 6, names)
+        self.assertEqual(len(names), 8, names)
 
     def test_no_record_gives_a_key_to_a_word_of_the_order(self):
         for path in records():
