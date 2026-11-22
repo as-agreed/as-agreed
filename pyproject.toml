@@ -36,4 +36,4 @@ Issues = "https://github.com/as-agreed/as-agreed/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-as_agreed = ["examples/*/*.md", "examples/*/*.json"]
+as_agreed = ["examples/*/*.md", "examples/*/*.json", "examples/*/.as-agreed/*.json", "examples/*/events/*.json"]

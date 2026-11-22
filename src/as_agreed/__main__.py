@@ -1,4 +1,4 @@
-"""python3 -m as_agreed {reconcile,import,demo,conformance,hook,band} and the ledger's own {run,register,check,report,flow}.
+"""python3 -m as_agreed {reconcile,import,demo,example,conformance,hook,band} and the ledger's own {run,register,check,report,flow}.
 
 `run`, `register`, `check`, `report` and `flow` are today's command line, delegated unchanged to
 `as_agreed.ledger`. `reconcile <folder>` is the SDK's folder run: every link checked against the
@@ -60,6 +60,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     dm.add_argument("--out", default=None)
     for names, text in map_flags:
         dm.add_argument(*names, action="store_true", help=text)
+    from .example import EXAMPLES
+    ex = sub.add_parser("example", help="copy an example the wheel carries into a new or empty folder: plugin-hold, the "
+                                        "agent plugin's confirmed record, binding and planted calls (see "
+                                        "as_agreed/example.py)")
+    ex.add_argument("name", choices=EXAMPLES)
+    ex.add_argument("dir", help="a new folder (its parent must exist) or an empty one")
     sub.add_parser("hook", help="the agent plugin's check: a Claude Code PreToolUse event on stdin, checked against "
                                 "record.json and binding.json in .as-agreed/, or in the folder AS_AGREED_RECORD or a "
                                 ".as-agreed-record pointer names (see as_agreed/hook.py and as_agreed/locate.py)")
@@ -113,6 +119,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         code = run_demo(a.fixture, retry=not a.no_retry, out_dir=out)
         redraw(os.path.join(out, "ledger.jsonl"), os.path.join(out, "flow.svg"),
                title=f"Where did the commitments go? {FIXTURES[a.fixture]}", values=a.values, expand_claims=a.expand_claims)
+        return code
+    if a.cmd == "example":
+        from .example import copy
+        code, text = copy(a.name, a.dir)
+        print(text if code == 0 else f"{NAME}: {text}", file=sys.stdout if code == 0 else sys.stderr)
         return code
     if a.cmd == "hook":
         from .hook import main as hook

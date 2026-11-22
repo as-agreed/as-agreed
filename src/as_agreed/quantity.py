@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from typing import Any, List, Optional, Tuple, Union
 
+from .commitment import number
+
 UNITS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9}
 TEENS = {"ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
          "seventeen": 17, "eighteen": 18, "nineteen": 19}
@@ -119,12 +121,15 @@ _RATIO_GAP = re.compile(r"^\s*(?:of|out\s+of|/)\s*$", re.IGNORECASE)
 
 
 def _digits(text: str) -> Figure:
-    """A digit token as a figure: a number where it is one, the text where a leading zero makes it an identifier."""
+    """A digit token as a figure: a number where it is one, the text where a leading zero makes it an identifier,
+    and the text past the range tier 1 compares (`commitment.number`: an integer up to MAX_INT_BITS, a finite
+    float), so a run of thousands of digits never reaches int() (3.14 refuses more than 4300) or reads as inf."""
     plain = text.replace(",", "")
     whole = plain.split(".")[0]
     if len(whole) > 1 and whole.startswith("0"):
         return text
-    return float(plain) if "." in plain else int(plain)
+    value = number(plain)
+    return text if value is None else value
 
 
 def _word_figures(run: str, start: int) -> List[Tuple[int, int, Figure]]:
