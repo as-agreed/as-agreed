@@ -209,6 +209,14 @@ class TheConfirm(Project):
         self.addCleanup(lambda: (os.close(slave), os.close(master)))
         return path, shown
 
+    def drained(self, shown, needle="Type your name", timeout=5.0):
+        """The terminal's output once it holds `needle`: the drain thread may still be reading when confirm returns."""
+        import time
+        end = time.time() + timeout
+        while needle not in b"".join(shown).decode("utf-8", "replace") and time.time() < end:
+            time.sleep(0.02)
+        return b"".join(shown).decode("utf-8", "replace")
+
     def test_with_no_terminal_confirm_refuses_and_writes_nothing(self):
         before = Path(self.record).read_bytes()
         code, text = capture.confirm(self.folder, tty=os.path.join(self.dir, "no-such-terminal"))
@@ -245,7 +253,7 @@ class TheConfirm(Project):
         path, shown = self.terminal("Ada\n")
         capture.confirm(self.folder, tty=path)
         # the planted date is still in: the person saw its mark on the terminal before typing the name
-        text = b"".join(shown).decode("utf-8", "replace")
+        text = self.drained(shown)
         self.assertIn("MARK " + MISMATCH, text)
         self.assertLess(text.index("MARK"), text.index("Type your name"))
 
@@ -402,7 +410,7 @@ class TheSecurityReviewRound1(Project):
         self.plant_hidden()
         path, shown = TheConfirm.terminal(self, "\n")
         capture.confirm(self.folder, tty=path)
-        text = b"".join(shown).decode("utf-8", "replace")
+        text = TheConfirm.drained(self, shown)
         self.assertEqual(printed_hidden(text.replace("\r", "")), [])
         before = text[:text.index("Type your name")].strip().splitlines()
         # the planted date, and the two hidden-character terms: 3 marks, counted after all record text
