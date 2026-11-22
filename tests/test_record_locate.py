@@ -194,6 +194,21 @@ class FailClosed(Tree):
             self.point(self.workspace, os.path.join(self.dir, "orders", "gone"))
             self.assertEqual(locate(self.work, {}).how, "none")  # in a shared parent, not the person's word
 
+    @unittest.skipUnless(hasattr(os, "getuid"), "no modes where the system has no user ids")
+    def test_a_folder_others_can_write_is_denied(self):
+        os.chmod(self.record, 0o777)
+        self.refused("faithful", "others can write", {ENV: self.record})
+        if os.path.isdir("/tmp") and os.stat("/tmp").st_mode & stat.S_IWOTH:  # root's, and anyone's to write
+            self.refused("faithful", "others can write", {ENV: "/tmp"})
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "needs links")
+    def test_the_log_is_never_written_through_a_link(self):
+        victim = os.path.join(self.dir, "victim.txt")
+        Path(victim).write_text("untouched\n")
+        os.symlink(victim, os.path.join(self.record, "hook.jsonl"))
+        self.assertTrue(denied(self.call("dropped", {ENV: self.record}))[0])
+        self.assertEqual(Path(victim).read_text(), "untouched\n")
+
     def test_a_lookup_that_fails_stops_the_call(self):
         with mock.patch("as_agreed.hook.locate", side_effect=RuntimeError("boom")):
             self.call("faithful", {ENV: self.record}, code=2)
@@ -233,6 +248,19 @@ class TheFreeze(Tree):
         self.refused(write(os.path.join("up", POINTER), "x"), "frozen")
         os.symlink(self.record, os.path.join(self.work, "rec"))
         self.refused(write(os.path.join("rec", "binding.json"), '{"steps": []}'), "frozen")
+
+    def test_another_unicode_form_of_a_parent_is_the_same_folder(self):
+        composed, decomposed = os.path.join(self.dir, "Caf\u00e9"), os.path.join(self.dir, "Cafe\u0301")
+        shutil.copytree(str(FIX / "workspace"), composed)
+        if not os.path.isdir(decomposed):
+            self.skipTest("this disk keeps the two forms apart: they are two folders, not one")
+        self.workspace, self.work = composed, os.path.join(composed, "task", "workdir")
+        self.point(composed, self.record)
+        other = os.path.join(decomposed, "task", "workdir")
+        for path in (os.path.join(other, POINTER), os.path.join(other, ".as-agreed", "binding.json"),
+                     os.path.join(decomposed, POINTER), os.path.join(decomposed.upper(), "TASK", POINTER)):
+            self.refused(write(path, '{"steps": []}'), "the lookup reads first")
+        self.held_and_kept()
 
     def test_the_located_record_and_binding_are_frozen(self):
         for name in ("record.json", "binding.json"):
@@ -286,7 +314,7 @@ class TheProjectLayout(Tree):
 class ThePluginCommand(Tree):
     """hooks/hooks.json as Claude Code runs it: the shell gate, then `python3 -m as_agreed hook` from the plugin."""
 
-    def run_plugin(self, ev, env=None, python=sys.executable):
+    def run_plugin(self, ev, env=None, python=sys.executable, code=0):
         bin_dir = os.path.join(self.dir, "bin")
         os.makedirs(bin_dir, exist_ok=True)
         Path(bin_dir, "python3").write_text(f'#!/bin/sh\nexec "{python}" "$@"\n')
@@ -296,8 +324,33 @@ class ThePluginCommand(Tree):
                    "CLAUDE_PLUGIN_ROOT": str(ROOT), **(env or {})}
         p = subprocess.run([SH, "-c", command["command"]], input=json.dumps(event(ev)), env=environ, cwd=self.work,
                            capture_output=True, text=True, timeout=60)
-        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.returncode, code, p.stderr)
+        self.stderr = p.stderr
         return json.loads(p.stdout) if p.stdout.strip() else None
+
+    def test_a_check_that_cannot_start_stops_the_call(self):
+        plugin = os.path.join(self.dir, "plugin")  # the plugin's hooks, without its src folder
+        shutil.copytree(str(ROOT / "hooks"), os.path.join(plugin, "hooks"))
+        self.assertIsNone(self.run_plugin("faithful", {ENV: self.record, "CLAUDE_PLUGIN_ROOT": plugin}, code=2))
+        self.assertIn("src folder cannot be reached", self.stderr)
+        only_sh = os.path.join(self.dir, "only-sh")  # a PATH with no python3 on it
+        os.makedirs(only_sh)
+        os.symlink(SH, os.path.join(only_sh, "sh"))
+        self.assertIsNone(self.run_plugin("faithful", {ENV: self.record, "PATH": only_sh}, code=2))
+        self.assertIn("python3 exit 127", self.stderr)
+        broken = os.path.join(self.dir, "broken-python")  # a python3 that fails before it decides
+        Path(broken).write_text("#!/bin/sh\nexit 1\n")
+        os.chmod(broken, stat.S_IRWXU)
+        self.assertIsNone(self.run_plugin("faithful", {ENV: self.record}, python=broken, code=2))
+        self.assertIn("python3 exit 1", self.stderr)
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "needs links")
+    def test_a_dotted_start_folder_through_a_link_is_checked(self):
+        shutil.copytree(str(EXAMPLE / ".as-agreed"), os.path.join(self.work, ".as-agreed"))
+        os.symlink(self.record, os.path.join(self.dir, "link"))  # the shell reads link/.. as orders/, Python as <tmp>
+        dotted = os.path.join(self.dir, "link", "..", "workspace", "task", "workdir")
+        self.assertTrue(denied(self.run_plugin("dropped", {"CLAUDE_PROJECT_DIR": dotted}))[0])
+        self.assertFalse(denied(self.run_plugin("faithful", {"CLAUDE_PROJECT_DIR": dotted}))[0])
 
     def test_the_plugin_checks_a_throwaway_folder_through_the_variable(self):
         self.assertTrue(denied(self.run_plugin("dropped", {ENV: self.record}))[0])

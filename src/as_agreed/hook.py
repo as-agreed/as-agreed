@@ -33,6 +33,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
 from .locate import ENV, FOLDER, POINTER, Located, locate, parents
@@ -48,15 +49,30 @@ def _path(tool_input: Dict[str, Any], root: str) -> str:
     return os.path.normpath(raw if os.path.isabs(raw) else os.path.join(root, raw)) if raw else ""
 
 
-def _key(path: str) -> str:
-    return os.path.realpath(path).lower()
+def _fold(name: str) -> str:
+    """A name as a case-insensitive, normalisation-insensitive disk (APFS) compares it: one Unicode form, no case."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def _anchor(path: str) -> Tuple[str, Tuple[str, ...]]:
+    """The deepest folder or file of `path` that exists, and the folded names below it that do not exist yet."""
+    tail: List[str] = []
+    while not os.path.exists(path) and os.path.dirname(path) != path:
+        tail.append(_fold(os.path.basename(path)))
+        path = os.path.dirname(path)
+    return path, tuple(reversed(tail))
 
 
 def _same(path: str, target: str) -> bool:
-    """One file: the same file on disk, or the same path once links and case are set aside (a file not made yet)."""
-    if os.path.exists(path) and os.path.exists(target) and os.path.samefile(path, target):
+    """One file, made or not yet: the part of each path that exists is the same folder or file on disk (links,
+    case and Unicode form resolved by the disk itself), and the names below it fold to the same."""
+    if os.path.normcase(path) == os.path.normcase(os.path.normpath(target)):
         return True
-    return os.path.normcase(path) == os.path.normcase(os.path.normpath(target)) or _key(path) == _key(target)
+    (a, below_a), (b, below_b) = _anchor(path), _anchor(target)
+    try:
+        return below_a == below_b and os.path.samefile(a, b)
+    except OSError:
+        return False
 
 
 def _aims_at_folder(tool: str, path: str, folder: str) -> Optional[str]:
@@ -77,8 +93,8 @@ def _shadows(tool: str, path: str, found: Located) -> Optional[str]:
     for name in FILES:
         if _same(path, os.path.join(found.start, FOLDER, name)):
             return f"{FOLDER}/{name} in the start folder"
-    if (found.pointer and _same(path, found.pointer)) or (
-            os.path.basename(path).lower() == POINTER and _key(os.path.dirname(path)) in map(_key, parents(found.start))):
+    if (found.pointer and _same(path, found.pointer)) or (_fold(os.path.basename(path)) == POINTER and any(
+            _same(os.path.dirname(path), d) for d in parents(found.start))):
         return f"the pointer {path}"
     return None
 
@@ -242,8 +258,9 @@ def main(stdin: str) -> int:
     sys.stdout.flush()
     if decision == "unbound":
         return 0
-    try:
-        with open(os.path.join(folder, "hook.jsonl"), "a", encoding="utf-8") as f:
+    try:  # never through a link or into a FIFO planted at the log's name (security review of ASAG-34, finding 3)
+        fd = band._own_file(None, os.path.join(folder, "hook.jsonl"), os.O_WRONLY | os.O_APPEND | os.O_CREAT)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
             f.write(json.dumps({"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
                                 "session": event.get("session_id"), "tool": event.get("tool_name"),
                                 "decision": decision, "held": held}) + "\n")

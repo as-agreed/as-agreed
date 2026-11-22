@@ -10,8 +10,8 @@ An agent that starts in a throwaway folder (a Multica task folder, a CI checkout
    folder's path (relative to the pointer's own folder when not absolute).
 
 `<start>` is `$CLAUDE_PROJECT_DIR`, else the current folder. A folder that 2 or 3 names and that is missing, cannot be
-read, or is not the person's own is an error the hook denies with: the person asked for a check, so no call passes
-unchecked. A pointer that is not the person's own (another user's, in a shared parent such as /tmp) is not their word
+read, is not the person's own, or others can write is an error the hook denies with: the person asked for a check, so
+no call passes unchecked. A pointer that is not the person's own (another user's, in a shared parent such as /tmp) is not their word
 and is skipped. Stdlib only; nothing here opens a network connection.
 """
 from __future__ import annotations
@@ -50,6 +50,14 @@ def _yours(st: os.stat_result) -> bool:
     return getuid is None or st.st_uid in (getuid(), 0)
 
 
+def _shared(st: os.stat_result) -> bool:
+    """Others can write it, or root owns it and its group can write it: another account could plant a binding with
+    no steps, or a link at the log's name. Not checked where the system has no user ids (Windows)."""
+    if not hasattr(os, "getuid"):
+        return False
+    return bool(st.st_mode & stat.S_IWOTH or (st.st_uid == 0 and st.st_mode & stat.S_IWGRP))
+
+
 def _folder(how: str, start: str, path: str, where: str, pointer: Optional[str] = None) -> Located:
     """The folder `path` names (relative to `where`), checked: there, readable and the person's own."""
     named = os.path.normpath(os.path.join(where, os.path.expanduser(path)))
@@ -63,6 +71,8 @@ def _folder(how: str, start: str, path: str, where: str, pointer: Optional[str] 
             error = f"{source} names {named}, which cannot be read"
         elif not _yours(st):
             error = f"{source} names {named}, which is not yours"
+        elif _shared(st):
+            error = f"{source} names {named}, which others can write"
     except OSError as e:
         error = f"{source} names {named}, which is missing ({e.strerror or type(e).__name__})"
     return Located(how, start, named, pointer, error)
