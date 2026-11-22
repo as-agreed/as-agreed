@@ -1,5 +1,19 @@
 # Changes
 
+## 0.1.3, 2026-11-25
+
+- `as-agreed show` prints each term of the record with the person's words for it, from `said`. It marks a quote that is not in the order, and a value that differs from its words. It also marks a number or date with no words, a hidden character, and a binding step that serves no term.
+- `as-agreed confirm` is the person's one step. It reads the name from their own terminal, never from a pipe. It writes `confirmed_by`, `confirmed_at` and two hashes, of the record and of the binding.
+- After the confirm, the hook stops every call while the record or the binding differs from its hash. It does not stop a program that writes both hashes again, or removes them.
+- The hook stops a file tool that writes `confirmed_by`, `confirmed_at` or a hash. It also stops the plain forms of an agent's call that runs `as-agreed confirm`.
+- A file tool that changes a confirmed record gets the reason that the record is frozen. A record confirmed by hand, as in 0.1.2, still works.
+- `as-agreed demo --capture` shows the confirm in one step. The record has a wrong date, and `show` marks it before the confirm.
+- In `carried_by`, the skill and the example give a key only to a value that the call uses. A value copied from the order counts as kept and checks nothing.
+- The skill says that `in` and `not_in` take a list, and that a date limit is `until` or `from`.
+- The first line of the flag names the hold when only an untyped term holds the run. Its count of typed terms does not change.
+- The install line is `python3 -m pip install as-agreed`. If the shell does not find `as-agreed`, use `python3 -m as_agreed`.
+- `docs/AGENT-SETUP.md` gives the setup and the prompt for your own coding agent, in five steps.
+
 ## 0.1.2, 2026-11-24
 
 - The gate holds a binding term that a step changed or lost when no hold stopped it at that step. The term stays held also if a later step gives it back. Before, the flag kept only the last check of each field, so this loss passed.

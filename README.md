@@ -14,7 +14,7 @@ The library runs today, on your computer. The record is a file on your disk. The
 
 After version 0.2, the As-Agreed service will keep the same record for all your runs and teams, over time.
 
-Version 0.1.2 holds a term that a middle step lost and that no hold stopped. The hook finds the record when the agent starts in a throwaway folder. The example of the hook is in the package.
+Version 0.1.3 lets the person confirm the record in one step, in their own terminal. The skill and the example give a key only to a value that the call uses. The first line of the flag names the hold when only an untyped term holds the run.
 
 ## Run the demo
 
@@ -34,6 +34,8 @@ PYTHONPATH=src python3 -m as_agreed demo --no-retry
 ```
 
 You must have Python 3.9 or higher. You do not use an account. The last line of the demo shows how much time it used.
+
+`as-agreed demo --capture` shows the confirm in one step. The record has a wrong date, and `show` marks it before the confirm.
 
 To use As-Agreed with your coding agent, read [docs/AGENT-SETUP.md](https://github.com/as-agreed/as-agreed/blob/main/docs/AGENT-SETUP.md).
 
@@ -118,9 +120,11 @@ See the band and the Board in four steps: [docs/FIRST-RUN.md](https://github.com
 /plugin install as-agreed@as-agreed
 ```
 
-The plugin adds a skill and a hook. The skill tells the agent to write the agreed record and the binding in `.as-agreed/`. The agent shows them to you. Then you manually write your name in `confirmed_by`. The hook stops a file tool that writes `confirmed_by`. The hook uses the record only after `confirmed_by` has a name.
+The plugin adds a skill and a hook. The skill tells the agent to write the agreed record, with your words for each term (`said`), and the binding in `.as-agreed/`. Run `as-agreed show` to read each term and its marks. Then run `as-agreed confirm` in your own terminal. It reads your name from the terminal and writes `confirmed_by`, `confirmed_at` and two hashes. The hook stops a file tool that writes one of these fields. The hook uses the record only after `confirmed_by` has a name.
 
-The hook runs before each tool call. It checks only the calls in `.as-agreed/binding.json`. It stops a call if a term changed, or if a must term is missing. It also stops a file tool that changes the record after you write your name. Each checked call writes one line to `.as-agreed/hook.jsonl`, without the values of the call. The hook uses `python3`, version 3.9 or higher. It uses the `src/` folder of the plugin, and it does not use the network.
+After the confirm, the hook stops every call while the record or the binding differs from its hash, until you confirm again. It does not stop a program that writes the hashes again, or removes both. A record confirmed by hand, as in 0.1.2, still works.
+
+The hook runs before each tool call. It checks only the calls in `.as-agreed/binding.json`. It stops a call if a term changed, or if a must term is missing. It also stops a file tool that changes the record after the confirm. Each checked call writes one line to `hook.jsonl` next to the record that the hook found, without the values of the call. The hook uses `python3`, version 3.9 or higher. It uses the `src/` folder of the plugin, and it does not use the network.
 
 Run the hook on the example, with no agent. The package has the example:
 
@@ -162,7 +166,7 @@ python3 ledger.py run examples/planted-failure --against-all --only hedged,not_f
 
 ## Its limits
 
-It compares only the fields that you declare, and it does not read a field from text. A declared value in English number words counts as its number, so "three" is 3. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` in the folder where Claude Code starts, or the folder that `AS_AGREED_RECORD` or `.as-agreed-record` names. The hook checks each call alone, so it does not hold a term that an earlier call lost. The band keeps the values of each checked call in `.as-agreed/runs/` on this machine, until you delete that folder.
+It compares only the fields that you declare, and it does not read a field from text. A declared value in English number words counts as its number, so "three" is 3. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` in the folder where Claude Code starts, or the folder that `AS_AGREED_RECORD` or `.as-agreed-record` names. The hook checks each call alone, so it does not hold a term that an earlier call lost. The band keeps the values of each checked call in `runs/` next to the record that the hook found, on this machine, until you delete that folder.
 
 ## Where this goes
 
