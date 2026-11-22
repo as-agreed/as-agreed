@@ -173,3 +173,75 @@ def _field_lines(ad: PlainAdapter, agreed: Any, link: str) -> List[str]:
             detail = ": " + ", ".join(f"{k} {x}" for k, x in r["marker_fates"].items() if x not in ("n/a", "kept", "unknown"))
         out.append(f"{tag:<27} {_status_words(u):<28} {label:<18} \"{u.text[:84]}\"{detail}")
     return [f"{'commitment ' + unit:<27} undeclared here: {', '.join(fields)}" for unit, fields in silent.items()] + out
+
+
+def run_capture_demo(quiet: bool = False) -> int:
+    """`as-agreed demo --capture` (0.1.3): the invented record in `examples/capture`, drafted with the person's words for
+    each term and one wrong date; its mark before the confirm; the fixed record confirmed; the hook's check, then its
+    stop after a change. It works in a new temporary folder, removed at the end, and reads in under a minute."""
+    import shutil
+    from . import capture
+    from .hook import decide
+
+    def say(s: str = "") -> None:
+        if not quiet:
+            print(s)
+
+    work = tempfile.mkdtemp(prefix="as-agreed-capture-")
+    folder = os.path.join(work, ".as-agreed")
+    record = os.path.join(folder, "record.json")
+    try:
+        shutil.copytree(os.path.join(EXAMPLES, "capture", ".as-agreed"), folder)
+        rec = json.loads(_read(record))
+        binding = json.loads(_read(os.path.join(folder, "binding.json")))
+        lines = capture.show_lines(rec, "record.json", binding)
+        first = capture.marks(rec, binding)
+        say(f"{NAME} {__version__} capture demo: an invented order, in a temporary folder; nothing is sent")
+        say(lines[1])
+        say()
+        say("1. The agent drafted the record, with the person's words for each term (`said`). `as-agreed show`:")
+        say("   " + lines[0])
+        marked = {m.unit for m in first}
+        block, keep = [], False
+        for line in lines[2:]:
+            if not line.startswith(" ") and line:
+                keep = line.split()[0] in marked
+            if keep:
+                block.append(line)
+        while block and not block[-1]:
+            block.pop()
+        for line in block:
+            say("   " + line)
+        say(f"   The other {len(rec['commitments']) - len(marked)} commitments: 0 marks.")
+        for m in first:  # the agent fixes what the person's words say
+            if m.path == "deadline":
+                next(c for c in rec["commitments"] if c["commitment_id"] == m.unit)["deadline"] = "2031-02-20"
+        with open(record, "w", encoding="utf-8") as f:
+            f.write(json.dumps(rec, indent=1, ensure_ascii=False) + "\n")
+        after = capture.marks(json.loads(_read(record)), binding)
+        say(f"2. The agent sets the date from the words, 2031-02-20. `as-agreed show`: {len(after)} marks.")
+        out = capture.write_confirm(folder, "the person")
+        say("3. The person runs `as-agreed confirm` in their own terminal. It reads the name from the terminal, never")
+        say("   from stdin, and writes four fields (here the demo writes them for the person):")
+        say(f"   confirmed_by {out['confirmed_by']}, confirmed_at {out['confirmed_at']}, "
+            f"confirmed_sha256 {out['confirmed_sha256'][:12]}, binding_sha256 {out['binding_sha256'][:12]}")
+        call = {"session_id": "demo", "tool_name": "Write",
+                "tool_input": {"file_path": "project/outbox/booking.json",
+                               "content": json.dumps({"guests": 14, "arrive": "2031-03-12", "leave": "2031-03-14",
+                                                      "total": 9200})}}
+        passed, pass_lines, _ = decide(call, work)
+        say(f"4. The booking within the terms: {passed}. {pass_lines[0] if pass_lines else ''}")
+        changed = json.loads(_read(record))
+        changed["commitments"][1]["limit"]["spend"]["max"] = 12000
+        with open(record, "w", encoding="utf-8") as f:  # a script, not a file tool: the hash shows it
+            f.write(json.dumps(changed, indent=1, ensure_ascii=False) + "\n")
+        stopped, stop_lines, _ = decide(call, work)
+        say("5. A script raises the spend limit in record.json to 12,000. The same booking:")
+        say(f"   {stopped}. {stop_lines[0] if stop_lines else ''}")
+        ok = len(first) == 1 and not after and passed == "pass" and stopped == "refused"
+        say()
+        say(f"demo: {len(first)} mark before the confirm and 0 after the fix; the booking passed; after the change it "
+            f"was {stopped}" if ok else "demo: the capture demo did not run as expected")
+        return 0 if ok else 1
+    finally:
+        shutil.rmtree(work, ignore_errors=True)

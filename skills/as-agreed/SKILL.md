@@ -14,18 +14,21 @@ The hook checks a tool call only when the folder where Claude Code starts has `.
 
 ```json
 {"order": "<the order, as the person gave it>",
- "commitments": [{"commitment_id": "pay-invoice", "act": "pay the October invoice",
+ "commitments": [{"commitment_id": "pay-invoice", "act": "pay the October invoice from Northwind Freight",
                   "obligor": "finance-ops", "obligee": "northwind-freight", "modality": "MUST",
                   "limit": {"amount": {"max": 18400, "unit": "USD"}},
-                  "carried_by": {"limit.amount": "amount"}}],
- "confirmed_by": "", "confirmed_at": ""}
+                  "said": {"act": "Pay the October invoice from Northwind Freight",
+                           "obligee": "Northwind Freight", "limit.amount": "up to 18,400 dollars"},
+                  "carried_by": {"limit.amount": "amount"}}]}
 ```
 
 - Write one commitment for each item that must occur. A commitment must have `act`, `obligor`, `obligee` and `modality`.
 - Write each number as a limit with a direction: `max`, `min`, `until`, `from`, `in` or `not_in`.
 - Write a date as `YYYY-MM-DD`.
+- In `said`, give each term the person's words for it. Copy the words exactly from the order. Give no words to a term that the person did not say.
 - In `carried_by`, give a key only to a value that the call uses, for example the amount that it pays. Do not copy the words of the order into the output: a copied value counts as kept and checks nothing.
 - Use only what the person gives. If a value is not clear, stop and tell the person. Do not add a value.
+- Do not write `confirmed_by`, `confirmed_at` or a hash. The person's confirm writes them.
 
 ## 2. Write the binding: `.as-agreed/binding.json`
 
@@ -40,9 +43,13 @@ The hook checks a tool call only when the folder where Claude Code starts has `.
 - Set `kind` to `mentions` for a call that must have no commitment.
 - `serves` gives the commitments that this step must have. `author` is the person or agent who writes the step.
 
-## 3. Show the record and the binding to the person
+## 3. Show the record to the person, then let the person confirm it
 
-Tell the person each commitment, its value, and its key. Tell the person which tool call the hook checks. Then tell the person to manually write their name in `confirmed_by`. The hook stops a file tool that writes `confirmed_by`. After the person writes it, the hook stops each file tool that changes the record or the binding.
+Run `as-agreed show`. It prints each term with its value and the person's words, and each step of the binding. It marks three things. A quote is not in the order. A value differs from its words. A number or a date has no words.
+
+Tell the person each term and each mark. Tell the person which tool call the hook checks. Correct a mark only with the person's words.
+
+Then ask the person to run `as-agreed confirm` in their own terminal. Do not run it yourself. The hook stops the plain forms of that call, not every form. The command reads the name from the terminal. It writes `confirmed_by`, `confirmed_at` and two hashes. After that, the hook stops each file tool that changes the record or the binding. While either file differs from its hash, the hook stops every call until the person confirms again.
 
 ## 4. When the hook stops a call
 
@@ -50,4 +57,4 @@ The reason gives the field, the agreed value, and the value in your call. Correc
 
 ## Its limits
 
-The hook compares only the keys that you declare. It does not read text. It checks only the calls in the binding. It does not stop a change to the record or the binding that a file tool does not make.
+The hook compares only the keys that you declare. It does not read text. It checks only the calls in the binding. It sees a change that a file tool does not make only through the two hashes. It misses a program that writes the hashes again, or removes both. It misses a program that runs confirm on a terminal it opens itself.

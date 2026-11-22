@@ -1,0 +1,84 @@
+{
+ "order": "Book the team offsite at Harbor Lodge for 14 people, from 12 March 2031 to 14 March 2031. Spend at most 9,500 euros. Pay the deposit by 20 February 2031. Choose rooms on a quiet floor. (invented example)",
+ "commitments": [
+  {
+   "commitment_id": "book-offsite",
+   "act": "book the team offsite at Harbor Lodge",
+   "obligor": "office-manager",
+   "obligee": "harbor-lodge",
+   "modality": "MUST",
+   "limit": {
+    "guests": {
+     "max": 14
+    },
+    "arrive": {
+     "from": "2031-03-12"
+    },
+    "leave": {
+     "until": "2031-03-14"
+    }
+   },
+   "said": {
+    "act": "Book the team offsite at Harbor Lodge",
+    "obligee": "Harbor Lodge",
+    "limit.guests": "for 14 people",
+    "limit.arrive": "from 12 March 2031",
+    "limit.leave": "to 14 March 2031"
+   },
+   "carried_by": {
+    "limit.guests": "guests",
+    "limit.arrive": "arrive",
+    "limit.leave": "leave"
+   }
+  },
+  {
+   "commitment_id": "spend",
+   "act": "spend on the offsite",
+   "obligor": "office-manager",
+   "obligee": "the-team",
+   "modality": "MUST",
+   "limit": {
+    "spend": {
+     "max": 9500,
+     "unit": "EUR"
+    }
+   },
+   "said": {
+    "act": "Spend",
+    "limit.spend": "at most 9,500 euros"
+   },
+   "carried_by": {
+    "limit.spend": "total"
+   }
+  },
+  {
+   "commitment_id": "deposit",
+   "act": "pay the deposit",
+   "obligor": "office-manager",
+   "obligee": "harbor-lodge",
+   "modality": "MUST",
+   "deadline": "2031-02-28",
+   "said": {
+    "act": "Pay the deposit",
+    "deadline": "by 20 February 2031"
+   }
+  },
+  {
+   "commitment_id": "quiet-floor",
+   "act": "choose rooms on a quiet floor",
+   "obligor": "office-manager",
+   "obligee": "the-team",
+   "modality": "MUST",
+   "acceptance_criteria": [
+    {
+     "criterion_id": "quiet",
+     "text": "every room is on a quiet floor",
+     "verification": "human_judged"
+    }
+   ],
+   "said": {
+    "act": "Choose rooms on a quiet floor"
+   }
+  }
+ ]
+}

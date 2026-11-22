@@ -1,4 +1,4 @@
-"""python3 -m as_agreed {reconcile,import,demo,example,conformance,hook,band} and the ledger's own {run,register,check,report,flow}.
+"""python3 -m as_agreed {reconcile,import,demo,example,conformance,hook,band,show,confirm} and the ledger's own {run,register,check,report,flow}.
 
 `run`, `register`, `check`, `report` and `flow` are today's command line, delegated unchanged to
 `as_agreed.ledger`. `reconcile <folder>` is the SDK's folder run: every link checked against the
@@ -58,6 +58,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     dm.add_argument("--fixture", choices=("widened", "dropped"), default="widened")
     dm.add_argument("--no-retry", action="store_true")
     dm.add_argument("--out", default=None)
+    dm.add_argument("--capture", action="store_true",
+                    help="the capture demo: an invented record, its marks before the confirm, and the hook after it")
     for names, text in map_flags:
         dm.add_argument(*names, action="store_true", help=text)
     from .example import EXAMPLES
@@ -76,6 +78,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     bd.add_argument("--board-temp", action="store_true",
                     help="the Board button's call: read the ledger only as a regular file, never through a link, write "
                          "the page to a new private temporary file and give its path in the JSON as `board`")
+    sh = sub.add_parser("show", help="each term of the record with its value, the person's words (`said`) and its "
+                                     "marks, before the person confirms (see as_agreed/capture.py)")
+    sh.add_argument("folder", nargs="?", default=None, help="the folder that holds record.json, or its parent; "
+                                                             "default: the record the hook finds from here")
+    co = sub.add_parser("confirm", help="the person's one step, in their own terminal: show the record, read the name "
+                                        "from the terminal (never stdin) and write confirmed_by, confirmed_at and the "
+                                        "two hashes")
+    co.add_argument("folder", nargs="?", default=None, help="as for show")
     cf = sub.add_parser("conformance", help="run the suite of SPEC §10 against an adapter registered by name (default: plain)")
     cf.add_argument("adapter", nargs="?", default="plain", help="plain; langgraph and temporal when their adapters land")
     cf.add_argument("--only", default="", help="comma-separated sentence ids")
@@ -107,6 +117,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         except (ValueError, OSError) as e:  # SPEC §6: a bad input is code 2, one line, no traceback
             print(f"{NAME}: {' '.join(str(e).split())}", file=sys.stderr)
             return 2
+    if a.cmd == "demo" and a.capture:
+        from .demo import run_capture_demo
+        return run_capture_demo()
     if a.cmd == "demo":
         from .demo import run_demo
         if not (a.values or a.expand_claims):
@@ -131,6 +144,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     if a.cmd == "band":
         from .band import main as band
         return band(a.ledger, a.board, a.board_temp)
+    if a.cmd in ("show", "confirm"):
+        from . import capture
+        code, text = (capture.show if a.cmd == "show" else capture.confirm)(a.folder)
+        print(text if code == 0 else f"{NAME} {text}", file=sys.stdout if code == 0 else sys.stderr)
+        return code
     if a.cmd == "conformance":
         from .conformance import run_suite, load_factory
         results = run_suite(load_factory(a.adapter), only=[s for s in a.only.split(",") if s.strip()] or None)

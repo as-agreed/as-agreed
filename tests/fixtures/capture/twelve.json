@@ -1,0 +1,177 @@
+{
+ "order": "Plan the garden season for Elm Street. Order 40 bags of compost by 3 April 2031. Spend at most 1,200 dollars on seeds. Plant tomatoes after 15 May 2031. Water the beds 2 times a week. Keep the tool shed locked. Invite the Oak Street school to one planting day. Hold the planting day on 24 May 2031. Book 2 volunteers per bed. Post the rota on the Elm Street board. Never use weed killer. Report the harvest to the council by 30 September 2031. Keep the paths clear. (invented example)",
+ "commitments": [
+  {
+   "commitment_id": "compost",
+   "act": "order compost",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "limit": {
+    "bags": {
+     "max": 40
+    }
+   },
+   "deadline": "2031-04-03",
+   "said": {
+    "act": "Order 40 bags of compost",
+    "limit.bags": "40 bags",
+    "deadline": "by 3 April 2031"
+   }
+  },
+  {
+   "commitment_id": "seeds",
+   "act": "spend on seeds",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "limit": {
+    "spend": {
+     "max": 2100,
+     "unit": "USD"
+    }
+   },
+   "said": {
+    "act": "Spend",
+    "limit.spend": "at most 1,200 dollars"
+   }
+  },
+  {
+   "commitment_id": "tomatoes",
+   "act": "plant tomatoes",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "limit": {
+    "plant": {
+     "from": "2031-05-15"
+    }
+   },
+   "said": {
+    "act": "Plant tomatoes",
+    "limit.plant": "after 15 May 2031"
+   }
+  },
+  {
+   "commitment_id": "water",
+   "act": "water the beds",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "SHOULD",
+   "limit": {
+    "per_week": {
+     "min": 2
+    }
+   },
+   "said": {
+    "act": "Water the beds",
+    "limit.per_week": "2 times a week"
+   }
+  },
+  {
+   "commitment_id": "shed",
+   "act": "keep the tool shed locked",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "acceptance_criteria": [
+    {
+     "criterion_id": "locked",
+     "text": "the tool shed is locked when nobody is in the garden",
+     "verification": "human_judged"
+    }
+   ],
+   "said": {
+    "act": "Keep the tool shed locked"
+   }
+  },
+  {
+   "commitment_id": "invite",
+   "act": "invite the Oak Street school to one planting day",
+   "obligor": "garden-lead",
+   "obligee": "oak-street-school",
+   "modality": "MUST",
+   "said": {
+    "act": "Invite the Oak Street school to one planting day",
+    "obligee": "Oak Street school"
+   }
+  },
+  {
+   "commitment_id": "planting-day",
+   "act": "hold the planting day",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "deadline": "2031-05-24",
+   "said": {
+    "act": "Hold the planting day",
+    "deadline": "on 24 May 2031"
+   }
+  },
+  {
+   "commitment_id": "volunteers",
+   "act": "book volunteers",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "limit": {
+    "per_bed": {
+     "min": 2
+    }
+   },
+   "said": {
+    "act": "Book 2 volunteers per bed",
+    "limit.per_bed": "2 volunteers per bed"
+   }
+  },
+  {
+   "commitment_id": "rota",
+   "act": "post the rota on the Elm Street board",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "said": {
+    "act": "Post the rota on the Elm Street board"
+   }
+  },
+  {
+   "commitment_id": "weed-killer",
+   "act": "use weed killer",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST_NOT",
+   "acceptance_criteria": [
+    {
+     "criterion_id": "no-weed-killer",
+     "text": "no weed killer was used in the season",
+     "verification": "human_judged"
+    }
+   ],
+   "said": {
+    "act": "use weed killer"
+   }
+  },
+  {
+   "commitment_id": "harvest",
+   "act": "report the harvest to the council",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "deadline": "2031-09-30",
+   "said": {
+    "act": "Report the harvest to the council",
+    "deadline": "by 30 September 2031"
+   }
+  },
+  {
+   "commitment_id": "paths",
+   "act": "keep the paths clear",
+   "obligor": "garden-lead",
+   "obligee": "elm-street-garden",
+   "modality": "MUST",
+   "said": {
+    "act": "Keep the paths clear"
+   }
+  }
+ ]
+}

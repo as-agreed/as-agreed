@@ -16,8 +16,13 @@ absolute and normalised; `json`, when given, names the input field that holds th
 otherwise the tool's input is the output. A call no step names is not checked.
 
 A step is denied when a term changed or a binding term is lost (decided by code), when the record is not confirmed,
-or when the check cannot run; what code cannot decide passes. A file tool may not set `confirmed_by`: the person
-writes it by hand. Once it is set, file tools may not change `record.json` or `binding.json`, and, for a record found
+or when the check cannot run; what code cannot decide passes. A file tool may not set `confirmed_by`, `confirmed_at`,
+`confirmed_sha256` or `binding_sha256`: the person writes them, by running `as-agreed confirm` in their own terminal
+(`capture.py`), or, as in 0.1.0 to 0.1.2, `confirmed_by` by hand; a file tool is judged on the record it would leave.
+An agent's call whose text runs confirm is denied (not one that builds the command at run time). After a
+confirm that wrote the two hashes, every call is denied while `record.json` or `binding.json` no longer matches its
+hash, whoever changed it, until the person confirms again. Once confirmed, file tools may not change `record.json` or
+`binding.json`, and, for a record found
 through the variable or a pointer, may not write a pointer in the start folder or a parent, or the start folder's
 `.as-agreed/` files, which the lookup reads first. While either file is unreadable, file tools may still repair it.
 Each checked call is logged to `hook.jsonl` in the record's folder by tool, decision and the unit, field and class of
@@ -31,11 +36,11 @@ import datetime
 import fnmatch
 import json
 import os
-import re
 import sys
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
+from .capture import CONFIRM_FIELDS, engine_view, runs_confirm, stale
 from .locate import ENV, FOLDER, POINTER, Located, locate, parents
 
 FILES = ("record.json", "binding.json")
@@ -99,21 +104,58 @@ def _shadows(tool: str, path: str, found: Located) -> Optional[str]:
     return None
 
 
-def _sets_confirmed(tool_input: Dict[str, Any]) -> bool:
-    """A file tool's new text that names `confirmed_by` with a value: only the person writes that, by hand."""
-    texts = [tool_input.get("content"), tool_input.get("new_string"), tool_input.get("new_source")]
-    texts += [e.get("new_string") for e in tool_input.get("edits") or [] if isinstance(e, dict)]
-    for t in (x for x in texts if isinstance(x, str) and "confirmed_by" in x):
-        try:
-            data = json.loads(t)
-        except ValueError:  # a fragment: empty only when every value it gives the field is ""
-            values = re.findall(r'"confirmed_by"\s*:\s*("(?:[^"\\]|\\.)*"|null)', t)
-            if not values or any(v not in ('""', "null") for v in values):
-                return True
-            continue
-        if not isinstance(data, dict) or str(data.get("confirmed_by") or "").strip():
-            return True
-    return False
+def _left_text(tool: str, tool_input: Dict[str, Any], current: Optional[str]) -> Tuple[Optional[str], str]:
+    """The text a file tool would leave in a file whose text is `current` (None: cannot be read), and why it cannot be
+    known when it cannot: Write takes its content; Edit and MultiEdit apply their edits in order, as the tools do."""
+    if tool == "Write":
+        content = tool_input.get("content")
+        return (content, "") if isinstance(content, str) else (None, "the Write gives no text content")
+    if tool in ("Edit", "MultiEdit"):
+        if current is None:
+            return None, "record.json cannot be read, so what the edit leaves cannot be checked"
+        edits = [tool_input] if tool == "Edit" else [e for e in tool_input.get("edits") or [] if isinstance(e, dict)]
+        if not edits:
+            return None, "the edit holds no change"
+        text = current
+        for e in edits:
+            old, new = e.get("old_string"), e.get("new_string")
+            if not isinstance(old, str) or not isinstance(new, str) or not old:
+                return None, "an edit has no old and new text"
+            n = text.count(old)
+            if n == 0 or (n > 1 and not e.get("replace_all")):
+                return None, "an edit does not apply to exactly one place, so what it leaves cannot be checked"
+            text = text.replace(old, new) if e.get("replace_all") else text.replace(old, new, 1)
+        return text, ""
+    return None, f"{tool} is not how the record is written"
+
+
+def _sets_confirmed(tool: str, tool_input: Dict[str, Any], folder: str) -> Optional[str]:
+    """Why a file tool aimed at record.json may not run, or None. It is judged on the record the call would leave
+    (security review of S2, finding 2): a call that leaves `confirmed_by`, `confirmed_at` or a confirm hash with a
+    value other than the one record.json holds now is refused, whatever its own text names. A draft may hold them
+    empty; a rewrite may keep the values the person left (a record they cleared by hand to change it); a result that
+    is not a JSON object holds no confirm (the hook reads the same text) and passes as a draft."""
+    try:
+        with open(os.path.join(folder, "record.json"), encoding="utf-8") as f:
+            current: Optional[str] = f.read()
+    except (OSError, ValueError):
+        current = None
+    try:
+        now = json.loads(current) if current is not None else {}
+    except ValueError:
+        now = {}
+    now = now if isinstance(now, dict) else {}
+    text, why = _left_text(tool, tool_input, current)
+    if text is None:
+        return why
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return None
+    if isinstance(data, dict) and any(str(data.get(f) or "").strip() and data.get(f) != now.get(f)
+                                      for f in CONFIRM_FIELDS):
+        return "it would write confirmed_by, confirmed_at or a hash"
+    return None
 
 
 def _load(folder: str, name: str) -> Any:
@@ -168,17 +210,26 @@ def decide(event: Dict[str, Any], root: str, call: int = 1, rows_out: Optional[L
     tool_input = event.get("tool_input") or {}
     path = _path(tool_input, root)
     aimed = _aims_at_folder(tool, path, folder)
+    if runs_confirm(tool_input):
+        return "refused", [CONFIRM_IS_THE_PERSONS], []
     try:
         rec = _load(folder, "record.json")
         confirmed = isinstance(rec, dict) and bool(str(rec.get("confirmed_by") or "").strip())
     except (OSError, ValueError):
         rec, confirmed = None, False
-    if aimed and _sets_confirmed(tool_input):
-        return "refused", [f"as-agreed: only the person writes confirmed_by in {where}record.json, by hand, after "
-                           f"reading the record and the binding"], []
+    why = _sets_confirmed(tool, tool_input, folder) if aimed == "record.json" else None
+    if why:
+        return "refused", [f"as-agreed: only the person writes confirmed_by, confirmed_at and the two hashes in "
+                           f"{where}record.json, by running `as-agreed confirm` in their own terminal after reading "
+                           f"the record and the binding ({why})"], []
+    changed = stale(folder, rec) if confirmed else None
+    if changed:
+        return "refused", [f"as-agreed: {where}{changed} changed after the person confirmed it (its hash in "
+                           f"record.json no longer matches). No call runs until the person reads it with `as-agreed "
+                           f"show` and runs `as-agreed confirm` again, in their own terminal"], []
     if aimed and confirmed:
         return "refused", [f"as-agreed: the confirmed record and binding in {where} are frozen; a change needs the "
-                           f"person: they clear confirmed_by by hand, then confirm the new version"], []
+                           f"person: they edit the files themselves, then run `as-agreed confirm` again"], []
     if aimed:
         return "unbound", [], []  # drafting or repairing the two files before the person confirms them
     shadow = _shadows(tool, path, found) if confirmed else None
@@ -195,10 +246,12 @@ def decide(event: Dict[str, Any], root: str, call: int = 1, rows_out: Optional[L
         return "unbound", [], []
     if not confirmed:
         return "refused", [f"as-agreed: the agreed record in {where}record.json is not confirmed by a person; show "
-                           f"them the record and the binding, and let them write confirmed_by by hand"], []
+                           f"them the record and the binding (`as-agreed show`), and let them run `as-agreed confirm` "
+                           f"in their own terminal"], []
     import as_agreed.sdk as ab
     from .hold import Policy, flag
-    agreed = ab.register(str(rec.get("order") or ""), [ab.Commitment.from_mapping(c) for c in rec["commitments"]],
+    agreed = ab.register(str(rec.get("order") or ""),
+                         [ab.Commitment.from_mapping(engine_view(c)) for c in rec["commitments"]],
                          adapter=ab.memory_adapter(), source=f"{where}record.json")
     binding = step.get("binding") or {}
     link = f"{tool}#{call}@1"
@@ -220,6 +273,10 @@ def decide(event: Dict[str, Any], root: str, call: int = 1, rows_out: Optional[L
     return "hold", list(h.lines) + lines[:1] + lines[2:], held
 
 
+CONFIRM_IS_THE_PERSONS = ("as-agreed: only the person runs as-agreed confirm, in their own terminal; an agent's call "
+                          "may not run it. Show them the record with `as-agreed show` and ask them to confirm it")
+
+
 def _deny(lines: List[str]) -> None:
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                              "permissionDecisionReason": "\n".join(lines)}}))
@@ -234,6 +291,12 @@ def main(stdin: str) -> int:
         print(f"as-agreed could not find the record: {type(e).__name__}: {' '.join(str(e).split())}", file=sys.stderr)
         return 2
     if found.how == "none":
+        try:  # no record here: still, the agent never runs confirm (it could confirm a record elsewhere)
+            if runs_confirm((json.loads(stdin or "{}") or {}).get("tool_input")):
+                _deny([CONFIRM_IS_THE_PERSONS])
+                sys.stdout.flush()
+        except (ValueError, AttributeError):
+            pass
         return 0
     if found.error:  # the person named a record that cannot be used: no call runs unchecked
         _deny([f"as-agreed: {found.error}. No call runs until it names the folder that holds the confirmed "

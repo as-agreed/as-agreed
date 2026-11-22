@@ -1,0 +1,18 @@
+{
+ "steps": [
+  {
+   "tool": "Write",
+   "path": "*/outbox/booking.json",
+   "json": "content",
+   "binding": {
+    "serves": [
+     "book-offsite",
+     "spend"
+    ],
+    "kind": "takes_effect",
+    "author": "office-manager"
+   }
+  }
+ ],
+ "baseline_minutes": null
+}

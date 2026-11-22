@@ -27,7 +27,7 @@ class PackagedFixtures(unittest.TestCase):
 
     def test_only_the_demo_fixtures_are_packaged(self):
         # 0.1.2: the plugin example ships too; its own test is tests/test_example_packaged.py
-        self.assertEqual(sorted(p.name for p in PACKAGED.iterdir()), sorted(FIXTURES + ("plugin-hold",)))
+        self.assertEqual(sorted(p.name for p in PACKAGED.iterdir()), sorted(FIXTURES + ("capture", "plugin-hold")))
 
 
 if __name__ == "__main__":
