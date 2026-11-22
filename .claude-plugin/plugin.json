@@ -9,6 +9,10 @@
   "homepage": "https://github.com/as-agreed/as-agreed",
   "repository": "https://github.com/as-agreed/as-agreed",
   "license": "Apache-2.0",
+  "hooks": [
+    "./hooks/claude-band.json"
+  ],
+  "types": "./hooks/band/types.d.ts",
   "keywords": [
     "agents",
     "hand-off",

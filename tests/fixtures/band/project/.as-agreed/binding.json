@@ -1,0 +1,17 @@
+{
+ "steps": [
+  {
+   "tool": "Write",
+   "path": "*/outbox/payment.json",
+   "json": "content",
+   "binding": {
+    "serves": [
+     "pay"
+    ],
+    "kind": "takes_effect",
+    "author": "bank"
+   }
+  }
+ ],
+ "baseline_minutes": null
+}

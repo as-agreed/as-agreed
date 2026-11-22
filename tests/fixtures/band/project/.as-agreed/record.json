@@ -1,0 +1,24 @@
+{
+ "order": "Pay the invoice, up to 18,400 dollars. (invented example)",
+ "commitments": [
+  {
+   "commitment_id": "pay",
+   "act": "pay the invoice",
+   "obligor": "finance",
+   "obligee": "northwind",
+   "modality": "MUST",
+   "limit": {
+    "amount": {
+     "max": 18400,
+     "unit": "USD"
+    }
+   },
+   "carried_by": {
+    "act": "act",
+    "limit.amount": "amount"
+   }
+  }
+ ],
+ "confirmed_by": "the person who gave the order (invented example)",
+ "confirmed_at": "2026-11-22"
+}
