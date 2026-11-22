@@ -49,6 +49,7 @@ CAPTURE_KEYS = ("said",)
 TTY = "/dev/tty"
 NOT_IN_ORDER, MISMATCH, NO_WORDS = "not in the order", "does not match its words", "no words"
 HIDDEN, BINDING = "hidden characters", "binding"
+KINDS = (NOT_IN_ORDER, MISMATCH, NO_WORDS, HIDDEN, BINDING)  # every kind of mark; SKILL.md names each
 # printed as an escape, never sent to a terminal: controls, format (bidi) and private characters, line separators
 HIDDEN_CATEGORIES = ("Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp")
 _UNSET: Any = object()

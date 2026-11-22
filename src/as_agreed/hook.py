@@ -217,6 +217,10 @@ def decide(event: Dict[str, Any], root: str, call: int = 1, rows_out: Optional[L
         confirmed = isinstance(rec, dict) and bool(str(rec.get("confirmed_by") or "").strip())
     except (OSError, ValueError):
         rec, confirmed = None, False
+    # a confirmed record is frozen against every file tool: that reason first, whatever else the call would do (T1)
+    if aimed and confirmed:
+        return "refused", [f"as-agreed: the confirmed record and binding in {where} are frozen; a change needs the "
+                           f"person: they edit the files themselves, then run `as-agreed confirm` again"], []
     why = _sets_confirmed(tool, tool_input, folder) if aimed == "record.json" else None
     if why:
         return "refused", [f"as-agreed: only the person writes confirmed_by, confirmed_at and the two hashes in "
@@ -227,9 +231,6 @@ def decide(event: Dict[str, Any], root: str, call: int = 1, rows_out: Optional[L
         return "refused", [f"as-agreed: {where}{changed} changed after the person confirmed it (its hash in "
                            f"record.json no longer matches). No call runs until the person reads it with `as-agreed "
                            f"show` and runs `as-agreed confirm` again, in their own terminal"], []
-    if aimed and confirmed:
-        return "refused", [f"as-agreed: the confirmed record and binding in {where} are frozen; a change needs the "
-                           f"person: they edit the files themselves, then run `as-agreed confirm` again"], []
     if aimed:
         return "unbound", [], []  # drafting or repairing the two files before the person confirms them
     shadow = _shadows(tool, path, found) if confirmed else None
