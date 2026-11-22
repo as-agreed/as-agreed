@@ -2,7 +2,7 @@
 
 This page has four steps. They start from the source and end on the Board.
 
-The band and the Board are not in version 0.1.0. They are in the next release. Until then, use the source.
+Version 0.1.0 of the package does not have the band and the Board. Use the source.
 
 ## 1. Get the code
 
