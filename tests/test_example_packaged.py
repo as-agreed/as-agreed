@@ -219,6 +219,28 @@ class TheCopyCommand(unittest.TestCase):
         self.assertIn("others can write", self.cli("example", "plugin-hold", shared, code=2))
         self.assertEqual(os.listdir(shared), [])
 
+    @unittest.skipUnless(hasattr(os, "getuid"), "needs user ids")
+    def test_under_umask_000_no_folder_of_the_copy_is_writable_by_the_group_or_others(self):
+        """Security review, finding 1: the lookup reads `<start>/.as-agreed/` with no check of who can write it."""
+        ex = os.path.join(self.dir, "ex")
+        old = os.umask(0)
+        try:
+            self.assertEqual(example.copy("plugin-hold", ex)[0], 0)
+        finally:
+            os.umask(old)
+        for p in [""] + tree(ex):
+            mode = stat.S_IMODE(os.lstat(os.path.join(ex, p)).st_mode)
+            self.assertFalse(mode & (stat.S_IWGRP | stat.S_IWOTH), f"{p or 'ex'} {oct(mode)}")
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs FIFOs")
+    def test_a_fifo_at_an_example_file_s_name_is_refused_at_once(self):
+        """Security review, finding 2: reading a FIFO would wait for a writer that never comes."""
+        self.cli("example", "plugin-hold", "ex")
+        dropped = os.path.join(self.dir, "ex", "events", "dropped.json")
+        os.unlink(dropped)
+        os.mkfifo(dropped)
+        self.assertIn("is not empty", self.cli("example", "plugin-hold", "ex", code=2))
+
     def test_an_unknown_example_is_a_usage_error(self):
         self.cli("example", "no-such-example", "ex", code=2)
         self.assertFalse(os.path.exists(os.path.join(self.dir, "ex")))

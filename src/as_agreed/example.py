@@ -24,6 +24,8 @@ EXAMPLES = ("plugin-hold",)
 PATTERNS = (".as-agreed/*.json", "events/*.json")  # the package-data patterns of pyproject.toml, under examples/<name>/
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _DIRECTORY = getattr(os, "O_DIRECTORY", 0)
+_NONBLOCK = getattr(os, "O_NONBLOCK", 0)  # a FIFO planted at a file's name never holds the command up
+_MODE = 0o755  # the copy's folders: never writable by the group or others, whatever the umask
 _AT = os.open in os.supports_dir_fd and os.mkdir in os.supports_dir_fd
 
 
@@ -44,9 +46,9 @@ def _entries(folder: str) -> List[str]:
 
 
 def _read(path: str) -> Optional[bytes]:
-    """A regular file's bytes, never through a link; None for anything else."""
+    """A regular file's bytes, never through a link or from a FIFO; None for anything else."""
     try:
-        fd = os.open(path, os.O_RDONLY | _NOFOLLOW)
+        fd = os.open(path, os.O_RDONLY | _NOFOLLOW | _NONBLOCK)
     except OSError:
         return None
     with os.fdopen(fd, "rb") as f:
@@ -82,10 +84,10 @@ def _write(dest: str, checked: os.stat_result, name: str, wanted: List[str]) -> 
             folder, base = os.path.split(f)
             if folder not in opened:
                 if _AT:
-                    os.mkdir(folder, 0o777, dir_fd=root)
+                    os.mkdir(folder, _MODE, dir_fd=root)
                     opened[folder] = os.open(folder, os.O_RDONLY | _DIRECTORY | _NOFOLLOW, dir_fd=root)
                 else:
-                    os.mkdir(os.path.join(dest, folder))
+                    os.mkdir(os.path.join(dest, folder), _MODE)
                     opened[folder] = None
             with open(os.path.join(source(name), *f.split("/")), "rb") as src:
                 data = src.read()
@@ -113,15 +115,16 @@ def copy(name: str, dest: str) -> Tuple[int, str]:
         st = None
     except OSError as e:
         return 2, f"{dest} cannot be read ({e.strerror or type(e).__name__})"
-    if st is None:
+    made = st is None
+    if made:
         if not os.path.isdir(os.path.dirname(dest)):
             return 2, f"the folder above {dest} is missing; make it first"
         try:
-            os.mkdir(dest)
+            os.mkdir(dest, _MODE)
             st = os.lstat(dest)
         except OSError as e:
             return 2, f"{dest} cannot be made ({e.strerror or type(e).__name__})"
-    elif stat.S_ISLNK(st.st_mode):
+    if stat.S_ISLNK(st.st_mode):
         return 2, f"{dest} is a link; give a new folder, not a link"
     elif not stat.S_ISDIR(st.st_mode):
         return 2, f"{dest} is not a folder"
@@ -129,7 +132,7 @@ def copy(name: str, dest: str) -> Tuple[int, str]:
         return 2, f"{dest} is not yours"
     elif _shared(st):
         return 2, f"{dest} is a folder others can write"
-    else:
+    elif not made:
         try:
             entries = _entries(dest)
         except OSError as e:
