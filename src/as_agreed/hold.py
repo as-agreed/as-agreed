@@ -183,14 +183,29 @@ def _rank(r: Mapping[str, Any]) -> int:
     return 2 if cls in CHANGES + LOSSES else 0 if cls in FAITHFUL else 1
 
 
-def flag(rows: Iterable[Mapping[str, Any]], baseline_minutes: Optional[float] = None) -> List[str]:
-    """The run's flag (D-181, D-191), the verdict first and the value second, from the run's records.
+@dataclass
+class Tally:
+    """The counts of the run's flag, and the rows behind them; `flag()` and the band read the same one."""
+    last: "OrderedDict[Tuple[str, str], Mapping[str, Any]]"  # each binding term at its last link, its worst verdict
+    kept: List[Tuple[str, str]]
+    held: List[Mapping[str, Any]]
+    through: List[Mapping[str, Any]]                          # changed and not held
+    open_: List[Mapping[str, Any]]                            # unchecked
+    saved: List[Tuple[str, str]]                              # kept because a hold stopped it first
+    stake: Dict[str, float]
+    where: str
 
-    Counted over the fields of the binding commitments (MUST, MUST_NOT), each at its last link in the run (within a
+
+def term_name(r: Mapping[str, Any]) -> str:
+    """A lost term as the flag names it: unit, field, class and reason."""
+    return f"{r['unit']} {r['field']} {r['drift_class']}: {r.get('reason', '')}"
+
+
+def tally(rows: Iterable[Mapping[str, Any]]) -> Tally:
+    """Counted over the fields of the binding commitments (MUST, MUST_NOT), each at its last link in the run (within a
     link, its worst verdict): kept (PRESERVED or RESTATED), held (changed or lost at a link that a hold stopped),
     changed and not held, unchecked (code could not decide). A term counts as kept because of the check when a hold
-    stopped it at one link and it was kept at a later link that passed its hold. Review time appears only against a
-    baseline the user sets, in minutes of manual check per run."""
+    stopped it at one link and it was kept at a later link that passed its hold."""
     rows = list(rows)
     holds_ = [h for h in rows if h.get("kind") == "hold" and (h.get("policy") or {}).get("on_loss") == "hold"]
     stopped = {h.get("link") for h in holds_ if not h.get("passed")}
@@ -209,27 +224,35 @@ def flag(rows: Iterable[Mapping[str, Any]], baseline_minutes: Optional[float] = 
         last[key] = r
         if r.get("link") in stopped and _rank(r) == 2:
             caught.add(key)
-    if not last:
-        return ["Kept as agreed: no binding term was checked in this run"]
     kept = [k for k, r in last.items() if _rank(r) == 0]
     held = [r for r in last.values() if _rank(r) == 2 and r.get("link") in stopped]
     through = [r for r in last.values() if _rank(r) == 2 and r.get("link") not in stopped]
     open_ = [r for r in last.values() if _rank(r) == 1]
     where = " and ".join(sorted({"delivery" if r.get("state") == "as_delivered" else "a brief" for r in last.values()}))
-
-    def named(rs: List[Mapping[str, Any]]) -> str:
-        return " (" + "; ".join(f"{r['unit']} {r['field']} {r['drift_class']}: {r.get('reason', '')}" for r in rs) + ")"
-
-    lines = [f"Kept as agreed: {len(kept)} of {len(last)} binding terms, checked at {where}; "
-             f"{len(held)} held{named(held) if held else ''}; "
-             + (f"{len(through)} changed and not held{named(through)}; " if through else "")
-             + f"{len(open_)} unchecked"]
     saved = [k for k in kept if k in caught and last[k].get("link") in passed]
     stake: Dict[str, float] = {}
     for unit, field in saved:
         money = _currency(limits.get(unit, {}).get(field.partition(".")[2])) if field.startswith("limit.") else None
         if money:
             stake[money[0]] = stake.get(money[0], 0.0) + money[1]
+    return Tally(last, kept, held, through, open_, saved, stake, where)
+
+
+def flag(rows: Iterable[Mapping[str, Any]], baseline_minutes: Optional[float] = None) -> List[str]:
+    """The run's flag (D-181, D-191), the verdict first and the value second, from the run's records, counted by
+    `tally()`. Review time appears only against a baseline the user sets, in minutes of manual check per run."""
+    t = tally(rows)
+    last, kept, held, through, open_, saved, stake = t.last, t.kept, t.held, t.through, t.open_, t.saved, t.stake
+    if not last:
+        return ["Kept as agreed: no binding term was checked in this run"]
+
+    def named(rs: List[Mapping[str, Any]]) -> str:
+        return " (" + "; ".join(term_name(r) for r in rs) + ")"
+
+    lines = [f"Kept as agreed: {len(kept)} of {len(last)} binding terms, checked at {t.where}; "
+             f"{len(held)} held{named(held) if held else ''}; "
+             + (f"{len(through)} changed and not held{named(through)}; " if through else "")
+             + f"{len(open_)} unchecked"]
     lines.append(f"{len(saved)} of {len(last)} terms kept that would have been lost"
                  + ("".join(f", {v:,.0f} {c}" for c, v in sorted(stake.items())) + " at stake" if stake else ""))
     if baseline_minutes is not None:

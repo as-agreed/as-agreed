@@ -17,7 +17,10 @@ A step is denied when a term changed or a binding term is lost (decided by code)
 or when the check cannot run; what code cannot decide passes. A file tool may not set `confirmed_by`: the person
 writes it by hand. Once it is set, file tools may not change `record.json` or `binding.json`. While either file is
 unreadable, file tools may still repair it. Each checked call is logged to `.as-agreed/hook.jsonl` by tool, decision
-and the unit, field and class of what was held; never a value of the call. Nothing here opens a network connection.
+and the unit, field and class of what was held; never a value of the call. The check's rows, values included, go to
+`.as-agreed/runs/<session>/ledger.jsonl`, with the band's `band.json` and the Board page `board.html` beside it
+(`band.py`); `runs/` holds a `.gitignore`, so they stay out of the project's commits, and nothing in it is sent
+anywhere. Nothing here opens a network connection.
 """
 from __future__ import annotations
 
@@ -94,8 +97,26 @@ def _outputs(step: Dict[str, Any], tool_input: Dict[str, Any]) -> Dict[str, Any]
     return out
 
 
-def decide(event: Dict[str, Any], root: str) -> Tuple[str, List[str], List[str]]:
-    """('unbound' | 'pass' | 'hold' | 'refused', lines, held) for one PreToolUse event in project `root`."""
+def _with_arrived(rows: List[Dict[str, Any]], outputs: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The rows, each commitment verdict with the value its carried key held in the step's output (for the Board
+    page); a key the output does not hold gets nothing."""
+    from .drift import MISSING, get_path
+    keys = {(r.get("commitment_id"), c.get("field")): c.get("key") for r in rows if r.get("kind") == "commitment"
+            for c in r.get("carried_by") or [] if isinstance(c, dict)}
+    out = []
+    for r in rows:
+        key = keys.get((r.get("unit"), r.get("field"))) if r.get("kind") == "verdict" else None
+        value = get_path(outputs, key) if key else MISSING
+        out.append(dict(r, arrived=value) if value is not MISSING else r)
+    return out
+
+
+def decide(event: Dict[str, Any], root: str, call: int = 1,
+           rows_out: Optional[List[Dict[str, Any]]] = None) -> Tuple[str, List[str], List[str]]:
+    """('unbound' | 'pass' | 'hold' | 'refused', lines, held) for one PreToolUse event in project `root`.
+
+    `call` numbers the checked calls of one session, so each is its own link of the task's run; `rows_out`, when
+    given, receives the check's rows, each commitment verdict with the value that arrived at its carried key."""
     tool = str(event.get("tool_name", ""))
     tool_input = event.get("tool_input") or {}
     path = _path(tool_input, root)
@@ -129,13 +150,16 @@ def decide(event: Dict[str, Any], root: str) -> Tuple[str, List[str], List[str]]
     agreed = ab.register(str(rec.get("order") or ""), [ab.Commitment.from_mapping(c) for c in rec["commitments"]],
                          adapter=ab.memory_adapter(), source=f"{FOLDER}/record.json")
     binding = step.get("binding") or {}
-    link = f"{tool}#1@1"
-    verdicts = ab.check(_outputs(step, tool_input), agreed, delivered=binding.get("kind") == "takes_effect",
+    link = f"{tool}#{call}@1"
+    outputs = _outputs(step, tool_input)
+    verdicts = ab.check(outputs, agreed, delivered=binding.get("kind") == "takes_effect",
                         link=link, binding=binding)
     # a change or a loss decided by code holds; what code cannot decide is recorded, not held (context.md)
     h = ab.hold(verdicts, agreed, policy=Policy("commit", "hold", on_undecided="record"), link=link)
     rows = agreed.adapter.records(agreed.adapter.run_id) + [v.record() for v in verdicts] + [h.record()]
     lines = flag(rows, conf.get("baseline_minutes"))
+    if rows_out is not None:
+        rows_out.extend(_with_arrived(rows, outputs))
     if h.passed:
         return "pass", lines, []
     from .hold import holds
@@ -153,7 +177,9 @@ def main(stdin: str) -> int:
         return 0
     try:
         event = json.loads(stdin or "{}")
-        decision, lines, held = decide(event, root)
+        from . import band
+        rows: List[Dict[str, Any]] = []
+        decision, lines, held = decide(event, root, band.calls(root, event.get("session_id")) + 1, rows)
     except Exception as e:  # a call in a project that declared steps, and that cannot be checked, does not run
         print(f"as-agreed could not check this call: {type(e).__name__}: {' '.join(str(e).split())}", file=sys.stderr)
         return 2
@@ -172,4 +198,9 @@ def main(stdin: str) -> int:
                                 "decision": decision, "held": held}) + "\n")
     except OSError:
         pass  # the decision is already given; a log that cannot be written changes nothing
+    if rows:
+        try:
+            band.write_run(root, event.get("session_id"), rows)
+        except Exception:  # noqa: BLE001 (any failure here must leave the exit code 0, or the deny above is dropped)
+            pass
     return 0
