@@ -361,13 +361,18 @@ def flag(rows: Iterable[Mapping[str, Any]], baseline_minutes: Optional[float] = 
     def named(rs: List[Mapping[str, Any]]) -> str:
         return " (" + "; ".join(term_name(r) for r in rs) + ")"
 
+    # the run is held, but by no typed term: the first line says so, in the place the line already gives to names, and
+    # by unit and modality only (an act may hold "); ", which ends that place for a parser)
+    by_untyped = [u for u in t.unrestated if u["held"]] if not held else []
+    hold_note = (f"the run is held by {len(by_untyped)} untyped term{'s' if len(by_untyped) != 1 else ''}: "
+                 + ", ".join(f"{u['unit']} {u['modality']}" for u in by_untyped)) if by_untyped else ""
     if last:
         lines = [f"Kept as agreed: {len(kept)} of {len(last)} binding terms, checked at {t.where}; "
-                 f"{len(held)} held{named(held) if held else ''}; "
+                 f"{len(held)} held{named(held) if held else (f' ({hold_note})' if hold_note else '')}; "
                  + (f"{len(through)} changed and not held{named(through)}; " if through else "")
                  + f"{len(open_)} unchecked"]
     else:
-        lines = ["Kept as agreed: no binding term was checked in this run"]
+        lines = ["Kept as agreed: no binding term was checked in this run" + (f"; {hold_note}" if hold_note else "")]
     lines.append(f"{len(saved)} of {len(last)} terms kept that would have been lost"
                  + ("".join(f", {v:,.0f} {c}" for c, v in sorted(stake.items())) + " at stake" if stake else ""))
     if baseline_minutes is not None:
