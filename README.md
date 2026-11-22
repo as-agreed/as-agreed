@@ -35,6 +35,8 @@ PYTHONPATH=src python3 -m as_agreed demo --no-retry
 
 You must have Python 3.9 or higher. You do not use an account. The last line of the demo shows how much time it used.
 
+To use As-Agreed with your coding agent, read [docs/AGENT-SETUP.md](https://github.com/as-agreed/as-agreed/blob/main/docs/AGENT-SETUP.md).
+
 ## What you see
 
 The order sets a limit: "up to 18,400 dollars". The output for the payment system has 19,800. All the types are correct, thus the schema check passes. As-Agreed stops the step, and the code does not call the payment system. The demo above shows these lines:
