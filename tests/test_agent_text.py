@@ -22,6 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
+sys.path.insert(0, str(SRC))
 SKILL = ROOT / "skills" / "as-agreed" / "SKILL.md"
 README = ROOT / "README.md"
 FIRST_RUN = ROOT / "docs" / "FIRST-RUN.md"
@@ -176,6 +177,31 @@ class TheFirstRunPage(unittest.TestCase):
         self.assertEqual(json.loads(out)["hookSpecificOutput"]["permissionDecision"], "deny")
         code, out = cli("band", os.path.join(".as-agreed", "runs", "example", "ledger.jsonl"), cwd=run)
         self.assertTrue(out.startswith(prefix), f"the page shows {prefix!r}; the example prints {out[:120]!r}")
+
+
+class TheSkillForms(unittest.TestCase):
+    """0.1.3 stage 3 (T1): the limit forms an agent wrote wrong, the confirm line for a shell that does not find
+    `as-agreed`, and every kind of mark that `show` gives named where the skill says what it marks."""
+
+    def section_3(self):
+        return re.search(r"^## 3\..*?(?=^## )", SKILL.read_text(encoding="utf-8"), re.M | re.S).group(0)
+
+    def test_in_and_not_in_take_a_list_and_a_date_limit_is_until_or_from(self):
+        rules = [ln for ln in SKILL.read_text(encoding="utf-8").splitlines() if ln.startswith("- ")]
+        self.assertTrue([ln for ln in rules if "`in` and `not_in` take a list" in ln], rules)
+        self.assertTrue([ln for ln in rules if "date limit" in ln and "`until`" in ln and "`from`" in ln], rules)
+
+    def test_the_confirm_step_names_python3_m_as_agreed_confirm(self):
+        self.assertRegex(self.section_3(), r"does not find `as-agreed`[^\n]*`python3 -m as_agreed confirm`")
+
+    def test_the_skill_names_every_kind_of_mark_that_show_gives(self):
+        from as_agreed import capture
+        said = {capture.NOT_IN_ORDER: "not in the order", capture.MISMATCH: "differs from its words",
+                capture.NO_WORDS: "no words", capture.HIDDEN: "hidden character", capture.BINDING: "binding with no step"}
+        self.assertEqual(sorted(said), sorted(capture.KINDS), "a kind of mark the skill does not name")
+        section = self.section_3()
+        for kind, words in said.items():
+            self.assertIn(words, section, kind)
 
 
 if __name__ == "__main__":

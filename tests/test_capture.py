@@ -497,6 +497,34 @@ class TheSecurityReviewRound1(Project):
         self.assertEqual(decide(booking(), self.dir)[0], "refused")
 
 
+class TheFrozenReasonFirst(Project):
+    """0.1.3 stage 3 (T1): a file tool's change to a confirmed record is refused with the frozen reason first, also
+    when the edit does not apply to exactly one place (the guide's claim 8 on the stage-2 wheel)."""
+
+    def test_every_file_tool_change_to_a_confirmed_record_reads_frozen(self):
+        self.confirmed()
+        self.assertGreater(Path(self.record).read_text(encoding="utf-8").count("office-manager"), 1)
+        rec = json.dumps(dict(self.rec(), order="changed"))
+        for ev in ({"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": "office-manager",
+                                                         "new_string": "someone-else"}},
+                   {"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": '"max": 9500',
+                                                         "new_string": '"max": 9400'}},
+                   {"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": "no such text",
+                                                         "new_string": "x"}},
+                   {"tool_name": "Write", "tool_input": {"file_path": self.record, "content": rec}},
+                   {"tool_name": "Write", "tool_input": {"file_path": self.binding, "content": "{}"}}):
+            decision, lines, _ = decide(ev, self.dir)
+            self.assertEqual(decision, "refused", ev)
+            self.assertIn("frozen", lines[0], ev)
+
+    def test_before_a_confirm_the_reasons_stay_as_in_s2(self):
+        ev = {"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": "office-manager",
+                                                   "new_string": "someone-else"}}
+        decision, lines, _ = decide(ev, self.dir)
+        self.assertEqual(decision, "refused")
+        self.assertIn("does not apply", lines[0])
+
+
 class TheOldRecords(unittest.TestCase):
     def test_a_record_confirmed_by_hand_works_as_before(self):
         with tempfile.TemporaryDirectory() as d:
@@ -526,7 +554,7 @@ class TheDemo(unittest.TestCase):
         self.assertIn("0 marks", out)
         self.assertIn("record.json changed after the person confirmed it", out)
         self.assertLessEqual(len(out.splitlines()), 45, out)
-        self.assertLessEqual(len(out.split()), 450, "a page a person reads in under a minute")
+        self.assertLessEqual(len(out.split()), 220, "a page a person reads in under a minute (T1)")
 
 
 if __name__ == "__main__":
