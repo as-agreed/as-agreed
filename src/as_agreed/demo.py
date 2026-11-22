@@ -193,8 +193,9 @@ def run_capture_demo(quiet: bool = False) -> int:
     try:
         shutil.copytree(os.path.join(EXAMPLES, "capture", ".as-agreed"), folder)
         rec = json.loads(_read(record))
-        lines = capture.show_lines(rec, "record.json")
-        first = capture.marks(rec)
+        binding = json.loads(_read(os.path.join(folder, "binding.json")))
+        lines = capture.show_lines(rec, "record.json", binding)
+        first = capture.marks(rec, binding)
         say(f"{NAME} {__version__} capture demo: an invented order, in a temporary folder; nothing is sent")
         say(lines[1])
         say()
@@ -217,7 +218,7 @@ def run_capture_demo(quiet: bool = False) -> int:
                 next(c for c in rec["commitments"] if c["commitment_id"] == m.unit)["deadline"] = "2031-02-20"
         with open(record, "w", encoding="utf-8") as f:
             f.write(json.dumps(rec, indent=1, ensure_ascii=False) + "\n")
-        after = capture.marks(json.loads(_read(record)))
+        after = capture.marks(json.loads(_read(record)), binding)
         say(f"2. The agent sets the date from the words, 2031-02-20. `as-agreed show`: {len(after)} marks.")
         out = capture.write_confirm(folder, "the person")
         say("3. The person runs `as-agreed confirm` in their own terminal. It reads the name from the terminal, never")

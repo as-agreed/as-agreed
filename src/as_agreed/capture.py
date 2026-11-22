@@ -16,13 +16,18 @@ A name with no words (an obligor the person did not say) is shown as "(no words)
 
 `as-agreed confirm [folder]` is the person's one step. It shows the same lines on the terminal, reads the name from
 `/dev/tty`, never from stdin, and writes into `record.json`: `confirmed_by`, `confirmed_at`, `confirmed_sha256` (the
-record without these four fields) and `binding_sha256` (the binding), each hash over the file's JSON with sorted keys.
+record without the two hash fields, so the name and the time are covered) and `binding_sha256` (the binding), each
+hash over the file's JSON with sorted keys. Everything `show` and `confirm` print from the record or the binding goes
+through `_safe`: a control, format or private character is printed as its `\\uXXXX` escape, never sent to the terminal,
+and the term that holds one gets the mark "hidden characters". `show` also prints the binding, step by step, and
+marks a binding with no step or with a step that serves an id the record does not hold.
 With no terminal, an empty name, or a file that changed while the person read it, it writes nothing.
 
 After a confirm, the hook (`hook.py`) stops every call while either file no longer matches its hash, and stops an
-agent's call that runs confirm. What it does not stop: a program that writes the record again with fresh hashes, or
-with none (it then reads as a record confirmed by hand, as in 0.1.0 to 0.1.2), or that runs confirm on a terminal it
-made itself. Stdlib only; nothing here opens a network connection.
+agent's call whose text runs confirm (read as the shell reads its words). What it does not stop: a program that writes
+the record again with fresh hashes, or with none (it then reads as a record confirmed by hand, as in 0.1.0 to 0.1.2),
+or that runs confirm in a form its text does not show, or on a terminal it opens itself. Stdlib only; nothing here
+opens a network connection.
 """
 from __future__ import annotations
 
@@ -31,6 +36,7 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import tempfile
 import unicodedata
 from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple
@@ -38,9 +44,14 @@ from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple
 from .quantity import figures
 
 CONFIRM_FIELDS = ("confirmed_by", "confirmed_at", "confirmed_sha256", "binding_sha256")
+HASH_FIELDS = ("confirmed_sha256", "binding_sha256")
 CAPTURE_KEYS = ("said",)
 TTY = "/dev/tty"
 NOT_IN_ORDER, MISMATCH, NO_WORDS = "not in the order", "does not match its words", "no words"
+HIDDEN, BINDING = "hidden characters", "binding"
+# printed as an escape, never sent to a terminal: controls, format (bidi) and private characters, line separators
+HIDDEN_CATEGORIES = ("Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp")
+_UNSET: Any = object()
 
 MONTHS = {m: i for i, m in enumerate(("january", "february", "march", "april", "may", "june", "july", "august",
                                       "september", "october", "november", "december"), 1)}
@@ -75,7 +86,8 @@ def canonical_sha256(value: Any) -> str:
 
 
 def record_sha256(rec: Dict[str, Any]) -> str:
-    return canonical_sha256({k: v for k, v in rec.items() if k not in CONFIRM_FIELDS})
+    """The record without its two hash fields: `confirmed_by` and `confirmed_at` are covered."""
+    return canonical_sha256({k: v for k, v in rec.items() if k not in HASH_FIELDS})
 
 
 def binding_sha256(binding: Any) -> str:
@@ -105,18 +117,77 @@ def stale(folder: str, rec: Any) -> Optional[str]:
 # a path to either, or code that loads the confirm. shortcut: the text only; a command built at run time (a variable,
 # an encoded string) is not seen; that residual is named in the module's docstring and the README's limits.
 _RUNS_CONFIRM = re.compile(r"(?:^|[^\w.-])(?:as-agreed|as_agreed(?:\.__main__)?)(?:\s+-\S+)*\s+confirm\b"
+                           r"|(?:as-agreed|as_agreed)['\"]\s*,\s*['\"]confirm\b"  # a list of words, as pty.spawn takes
                            r"|as_agreed\.capture|from\s+as_agreed\s+import\s+capture")
 
 
+_SEPARATORS = {";", "&&", "||", "|", "&", "\n", ";;", "|&"}
+
+
+def _words(command: str) -> List[List[str]]:
+    """The command's words as the shell reads them (quotes and backslashes removed), one list per simple command."""
+    lex = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lex.whitespace_split = True
+    out: List[List[str]] = [[]]
+    for w in lex:
+        if w in _SEPARATORS or (w and set(w) <= set(";&|")):
+            out.append([])
+        else:
+            out[-1].append(w)
+    return out
+
+
 def runs_confirm(tool_input: Any) -> bool:
+    """A call whose text runs confirm: the plain forms, and the same read as the shell reads its words. A command built
+    at run time, or a program that runs confirm itself, is not seen (residual R3)."""
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    return isinstance(command, str) and bool(_RUNS_CONFIRM.search(command))
+    if not isinstance(command, str):
+        return False
+    if _RUNS_CONFIRM.search(command):
+        return True
+    try:
+        segments = _words(command)
+    except ValueError:  # unbalanced quotes: the shell would not run it as written; read it as plain words
+        segments = [command.split()]
+    for ws in segments:
+        for i, w in enumerate(ws):
+            base = os.path.basename(w)
+            module = w[2:] if w.startswith("-m") and len(w) > 2 else (ws[i + 1] if w == "-m" and i + 1 < len(ws) else "")
+            if "as_agreed.capture" in w or ((base == "as-agreed" or module in ("as_agreed", "as_agreed.__main__"))
+                                            and "confirm" in ws[i + 1:]):
+                return True
+    return False
 
 
 # --- the person's words and the marks
 
 def _norm(text: str) -> str:
     return " ".join(unicodedata.normalize("NFC", str(text)).split())
+
+
+def _is_hidden(ch: str) -> bool:
+    return ch not in " \t\n\r" and unicodedata.category(ch) in HIDDEN_CATEGORIES
+
+
+def _hidden(text: Any) -> bool:
+    return any(_is_hidden(ch) for ch in str(text))
+
+
+def _safe(text: Any) -> str:
+    """Record text as `show` and `confirm` print it: ordinary whitespace runs made one space, and every control,
+    format or private character written as its escape, so nothing in the record reaches the terminal as a command."""
+    s = re.sub(r"[ \t\n\r]+", " ", str(text))
+    return "".join((f"\\u{ord(ch):04x}" if ord(ch) < 0x10000 else f"\\U{ord(ch):08x}") if _is_hidden(ch) else ch
+                   for ch in s)
+
+
+def _strings(value: Any) -> List[str]:
+    """Every text inside a JSON value, keys included."""
+    if isinstance(value, dict):
+        return [s for k, v in value.items() for s in [str(k)] + _strings(v)]
+    if isinstance(value, list):
+        return [s for v in value for s in _strings(v)]
+    return [value] if isinstance(value, str) else []
 
 
 def _tokens(text: str) -> Set[str]:
@@ -236,21 +307,58 @@ def _said(c: Dict[str, Any]) -> Tuple[Dict[str, str], List[Mark]]:
     return said, []
 
 
-def marks(rec: Dict[str, Any]) -> List[Mark]:
-    """Every mark of a record, commitment by commitment, term by term."""
+HIDDEN_TEXT = "a control, format or private character, printed as its escape"
+
+
+def binding_marks(rec: Dict[str, Any], binding: Any) -> List[Mark]:
+    """The binding decides which calls the hook checks: a binding with no step, or a step that serves an id the record
+    does not hold, checks less than it seems to; `None` stands for a binding that cannot be read."""
+    if binding is None:
+        return [Mark("binding", "binding.json", BINDING, "binding.json cannot be read: the hook checks no call")]
+    steps = binding.get("steps") if isinstance(binding, dict) else None
+    if not isinstance(steps, list) or not steps:
+        return [Mark("binding", "steps", BINDING, "the binding has no step: the hook checks no call")]
+    ids = {str(c.get("commitment_id")) for c in rec.get("commitments") or [] if isinstance(c, dict)}
+    out: List[Mark] = []
+    for i, s in enumerate(steps, 1):
+        if not isinstance(s, dict):
+            out.append(Mark("binding", f"step {i}", BINDING, "this step is not a mapping"))
+            continue
+        if any(_hidden(x) for x in _strings(s)):
+            out.append(Mark("binding", f"step {i}", HIDDEN, HIDDEN_TEXT))
+        serves = (s.get("binding") or {}).get("serves") if isinstance(s.get("binding"), dict) else None
+        if not isinstance(serves, list) or not serves:
+            out.append(Mark("binding", f"step {i}", BINDING, "this step serves no commitment"))
+            continue
+        for sid in serves:
+            if str(sid) not in ids:
+                out.append(Mark("binding", f"step {i}", BINDING, f"serves {sid}, which the record does not hold"))
+    return out
+
+
+def marks(rec: Dict[str, Any], binding: Any = _UNSET) -> List[Mark]:
+    """Every mark of a record, commitment by commitment, term by term; with `binding`, the binding's marks too."""
     order = _norm(rec.get("order") or "")
     out: List[Mark] = []
+    if _hidden(rec.get("order") or ""):
+        out.append(Mark("order", "order", HIDDEN, HIDDEN_TEXT))
     for c in rec.get("commitments") or []:
         if not isinstance(c, dict):
             continue
         unit = str(c.get("commitment_id") or "?")
+        if _hidden(unit):
+            out.append(Mark(unit, "commitment_id", HIDDEN, HIDDEN_TEXT))
         said, bad = _said(c)
         out += bad
         for path, value in terms(c):
             words = said.get(path)
+            if any(_hidden(x) for x in [path] + _strings(value) + ([words] if words is not None else [])):
+                out.append(Mark(unit, path, HIDDEN, HIDDEN_TEXT))
             if words is not None and _norm(words) not in order:
                 out.append(Mark(unit, path, NOT_IN_ORDER, "these words are not in the order"))
             out += _term_marks(unit, path, value, words)
+    if binding is not _UNSET:
+        out += binding_marks(rec, binding)
     return out
 
 
@@ -268,42 +376,79 @@ def _value_text(path: str, value: Any) -> str:
     return "" if value is None else str(value)
 
 
-def show_lines(rec: Dict[str, Any], where: str = "record.json") -> List[str]:
-    """What `as-agreed show` prints: each commitment, each term with its value and its words, each mark under its term."""
-    all_marks = marks(rec)
+def mark_line(m: Mark, named: bool = False) -> str:
+    where = f"{_safe(m.unit)} {_safe(m.path)}: " if named else ""
+    return f"MARK {m.kind}: {where}{_safe(m.text)}"
+
+
+def _binding_lines(rec: Dict[str, Any], binding: Any, by_term: Dict[Tuple[str, str], List[Mark]]) -> List[str]:
+    steps = binding.get("steps") if isinstance(binding, dict) else None
+    steps = steps if isinstance(steps, list) else []
+    lines = ["", f"binding: {len(steps)} step{'s' if len(steps) != 1 else ''} (the calls the hook checks)"]
+    for key in ("binding.json", "steps"):
+        lines += [f"    {mark_line(m)}" for m in by_term.get(("binding", key), [])]
+    served = set()
+    for i, s in enumerate(steps, 1):
+        s = s if isinstance(s, dict) else {}
+        b = s.get("binding") if isinstance(s.get("binding"), dict) else {}
+        serves = b.get("serves") if isinstance(b.get("serves"), list) else []
+        served |= {str(x) for x in serves}
+        lines.append(f"  step {i}: tool {_safe(s.get('tool', ''))}, path {_safe(s.get('path') or 'any')}, kind "
+                     f"{_safe(b.get('kind', ''))}, serves {_safe(', '.join(map(str, serves))) or 'nothing'}")
+        lines += [f"    {mark_line(m)}" for m in by_term.get(("binding", f"step {i}"), [])]
+    ids = [str(c.get("commitment_id")) for c in rec.get("commitments") or [] if isinstance(c, dict)]
+    unserved = [x for x in ids if x not in served]
+    lines.append(f"  served by no step: {_safe(', '.join(unserved)) if unserved else 'none'}")
+    return lines
+
+
+def show_lines(rec: Dict[str, Any], where: str = "record.json", binding: Any = _UNSET) -> List[str]:
+    """What `as-agreed show` prints: each commitment, each term with its value and its words, each mark under its term;
+    with `binding`, each step and the commitments no step serves. Record text goes through `_safe`."""
+    all_marks = marks(rec, binding)
     by_term: Dict[Tuple[str, str], List[Mark]] = {}
     for m in all_marks:
         by_term.setdefault((m.unit, m.path), []).append(m)
     cs = [c for c in rec.get("commitments") or [] if isinstance(c, dict)]
     n_terms = sum(len(terms(c)) for c in cs)
-    lines = [f"as-agreed show: {where}, {len(cs)} commitments, {n_terms} terms; "
+    lines = [f"as-agreed show: {_safe(where)}, {len(cs)} commitments, {n_terms} terms; "
              f"{len(all_marks)} mark{'s' if len(all_marks) != 1 else ''}",
-             f'order: "{_norm(rec.get("order") or "")}"']
+             f'order: "{_safe(_norm(rec.get("order") or ""))}"']
+    lines += [f"    {mark_line(m)}" for m in by_term.get(("order", "order"), [])]
     for c in cs:
         unit = str(c.get("commitment_id") or "?")
         said, _ = _said(c)
-        lines += ["", f"{unit}  {c.get('modality') or ''}"]
-        for m in by_term.get((unit, "said"), []):
-            lines.append(f"    MARK {m.kind}: {m.text}")
+        lines += ["", f"{_safe(unit)}  {_safe(c.get('modality') or '')}"]
+        for key in ("commitment_id", "said"):
+            lines += [f"    {mark_line(m)}" for m in by_term.get((unit, key), [])]
         for path, value in terms(c):
             if path in ("modality",):
                 continue
             words = said.get(path)
-            shown = f'"{_norm(words)}"' if words is not None else "(no words)"
+            shown = f'"{_safe(_norm(words))}"' if words is not None else "(no words)"
             if path.startswith("acceptance_criteria.") and isinstance(value, dict):
                 how = "judged by a person" if value.get("verification") != "machine_checkable" else "checked by code"
-                lines.append(f"  {how}: {value.get('text', '')}  {shown}")
+                lines.append(f"  {how}: {_safe(value.get('text', ''))}  {shown}")
             else:
-                lines.append(f"  {path:<14} {_value_text(path, value)}  {shown}")
-            for m in by_term.get((unit, path), []):
-                lines.append(f"    MARK {m.kind}: {m.text}")
+                lines.append(f"  {_safe(path):<14} {_safe(_value_text(path, value))}  {shown}")
+            lines += [f"    {mark_line(m)}" for m in by_term.get((unit, path), [])]
+    if binding is not _UNSET:
+        lines += _binding_lines(rec, binding, by_term)
     lines.append("")
     if str(rec.get("confirmed_by") or "").strip():
-        lines.append(f"Confirmed by {rec['confirmed_by']} at {rec.get('confirmed_at') or 'an unstated time'}.")
+        lines.append(f"Confirmed by {_safe(rec['confirmed_by'])} at {_safe(rec.get('confirmed_at') or 'an unstated time')}.")
     else:
         lines.append("Not confirmed. The person reads each term and mark, then runs `as-agreed confirm` in their own "
                      "terminal.")
     return lines
+
+
+def _read_binding(folder: str) -> Any:
+    """The binding as `show` and `confirm` print it; None when it cannot be read (a mark)."""
+    try:
+        return _load(folder, "binding.json")
+    except (OSError, ValueError):
+        return None
 
 
 # --- the folder, show and confirm
@@ -330,11 +475,11 @@ def show(folder: Optional[str] = None) -> Tuple[int, str]:
         f = folder_of(folder)
         rec = _load(f, "record.json")
     except (OSError, ValueError) as e:
-        return 2, f"show: {' '.join(str(e).split())}"
+        return 2, f"show: {_safe(' '.join(str(e).split()))}"
     if not isinstance(rec, dict):
         return 2, "show: record.json is not a JSON object"
     where = os.path.relpath(os.path.join(f, "record.json"))
-    lines = show_lines(rec, where)
+    lines = show_lines(rec, where, _read_binding(f))
     gone = stale(f, rec)
     if gone:
         lines.append(f"{gone} changed after the person confirmed it: the hook stops every call until they confirm "
@@ -418,7 +563,7 @@ def confirm(folder: Optional[str] = None, tty: str = TTY) -> Tuple[int, str]:
         rec = json.loads(raw[0].decode("utf-8"))
         json.loads(raw[1].decode("utf-8"))
     except (OSError, ValueError) as e:
-        return 2, f"confirm: {' '.join(str(e).split())}; nothing was written"
+        return 2, f"confirm: {_safe(' '.join(str(e).split()))}; nothing was written"
     if not isinstance(rec, dict):
         return 2, "confirm: record.json is not a JSON object; nothing was written"
     try:
@@ -427,9 +572,14 @@ def confirm(folder: Optional[str] = None, tty: str = TTY) -> Tuple[int, str]:
         return 2, (f"confirm: no terminal ({tty} cannot be opened: {e.strerror}). The person runs `as-agreed confirm` "
                    f"in their own terminal; nothing was written")
     try:
-        lines = show_lines(rec, os.path.relpath(os.path.join(f, "record.json")))
+        binding = json.loads(raw[1].decode("utf-8"))
+        lines = show_lines(rec, os.path.relpath(os.path.join(f, "record.json")), binding)
+        found = marks(rec, binding)
+        # the last lines before the prompt are counted and written by this code, never record text
+        summary = ["", f"as-agreed counted {len(found)} mark{'s' if len(found) != 1 else ''} in this record and its "
+                       f"binding{':' if found else '.'}"] + [f"  {mark_line(m, named=True)}" for m in found]
         prompt = "\nType your name to confirm this record and its binding, or press Enter to stop: "
-        os.write(fd, ("\n".join(lines) + "\n" + prompt).encode("utf-8"))
+        os.write(fd, ("\n".join(lines + summary) + "\n" + prompt).encode("utf-8"))
         name = _valid_name(_read_line(fd))
         if name is None:
             return 2, "confirm: no name given; nothing was written"

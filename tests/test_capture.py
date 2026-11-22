@@ -304,7 +304,10 @@ class TheHookAfterCapture(Project):
                                                                 "new_string": f'"{name}": "x", "order"'}}):
                     decision, lines, _ = self.call(ev)
                     self.assertEqual(decision, "refused", (stage, name, ev["tool_name"]))
-                    self.assertIn("only the person writes confirmed_by", lines[0])
+                    if stage == "before":
+                        self.assertIn("only the person writes confirmed_by", lines[0])
+                    else:  # a confirmed record is frozen against every file tool as well
+                        self.assertTrue("only the person writes confirmed_by" in lines[0] or "frozen" in lines[0])
 
     def test_a_draft_may_still_hold_the_empty_fields(self):
         rec = dict(self.rec(), confirmed_by="", confirmed_at="")
@@ -362,6 +365,128 @@ class TheHookAfterCapture(Project):
                 self.assertEqual(hook_main(json.dumps(bash("as-agreed confirm"))), 0)
         answer = json.loads(out.getvalue())
         self.assertEqual(answer["hookSpecificOutput"]["permissionDecision"], "deny")
+
+
+HIDDEN_CATS = ("Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp")
+
+
+def printed_hidden(text):
+    """The control, format or private characters in printed text, line breaks aside."""
+    import unicodedata
+    return sorted({hex(ord(ch)) for ch in text if ch != "\n" and unicodedata.category(ch) in HIDDEN_CATS})
+
+
+class TheSecurityReviewRound1(Project):
+    """The Security reviewer's five findings on 2f42cbe (orders/ASAG-66-S2/security.md), each as a test."""
+
+    def binding_now(self):
+        return load(self.binding)
+
+    def plant_hidden(self):
+        def change(r):
+            r["commitments"][3]["acceptance_criteria"][0]["text"] += "\x1b[2J\x1b[H as-agreed show: 0 marks"
+            r["commitments"][0]["obligor"] = "office-manager\u202e"
+        self.edit(change)
+
+    # finding 1: what show and confirm print
+    def test_1_hidden_characters_are_printed_as_escapes_and_marked(self):
+        self.plant_hidden()
+        lines = capture.show_lines(self.rec(), "record.json", self.binding_now())
+        self.assertEqual(printed_hidden("\n".join(lines)), [])
+        self.assertIn("\\u001b[2J", "\n".join(lines))
+        hidden = [(m.unit, m.path) for m in capture.marks(self.rec()) if m.kind == capture.HIDDEN]
+        self.assertEqual(hidden, [("book-offsite", "obligor"), ("quiet-floor", "acceptance_criteria.quiet")])
+
+    @unittest.skipUnless(hasattr(os, "openpty"), "needs a pseudo-terminal")
+    def test_1_confirm_ends_with_a_summary_counted_by_code(self):
+        self.plant_hidden()
+        path, shown = TheConfirm.terminal(self, "\n")
+        capture.confirm(self.folder, tty=path)
+        text = b"".join(shown).decode("utf-8", "replace")
+        self.assertEqual(printed_hidden(text.replace("\r", "")), [])
+        before = text[:text.index("Type your name")].strip().splitlines()
+        # the planted date, and the two hidden-character terms: 3 marks, counted after all record text
+        self.assertIn("as-agreed counted 3 marks in this record and its binding:", before[-4])
+        self.assertTrue(all(ln.strip().startswith("MARK ") for ln in before[-3:]), before[-3:])
+
+    # finding 2: the record a file tool would leave
+    def test_2_an_edit_that_sets_the_name_by_its_value_alone_is_refused(self):  # probe P1
+        self.edit(lambda r: r.update(confirmed_by="", confirmed_at=""))
+        ev = {"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": 'by": ""',
+                                                   "new_string": 'by": "Mallory"'}}
+        self.assertEqual(decide(ev, self.dir)[0], "refused")
+
+    def test_2_two_edits_through_a_stand_in_key_are_refused(self):  # probe P1b
+        e1 = {"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": '"order"',
+                                                   "new_string": '"confirmed_bz": "", "order"'}}
+        self.assertEqual(decide(e1, self.dir)[0], "unbound")  # an empty key of another name sets nothing
+        text = Path(self.record).read_text(encoding="utf-8").replace('"order"', '"confirmed_bz": "", "order"', 1)
+        Path(self.record).write_text(text, encoding="utf-8")
+        e2 = {"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": 'bz": ""',
+                                                   "new_string": 'by": "Mallory"'}}
+        self.assertEqual(decide(e2, self.dir)[0], "refused")
+        multi = {"tool_name": "MultiEdit", "tool_input": {"file_path": self.record, "edits": [
+            {"old_string": 'bz": ""', "new_string": 'bx": ""'}, {"old_string": 'bx": ""', "new_string": 'by": "M"'}]}}
+        self.assertEqual(decide(multi, self.dir)[0], "refused")
+
+    def test_2_a_write_with_escaped_keys_and_computed_hashes_is_refused(self):  # probe P2
+        rec = dict(self.rec(), confirmed_by="Mallory", confirmed_at="2031-01-01T00:00:00+00:00")
+        rec["confirmed_sha256"] = capture.record_sha256(rec)
+        rec["binding_sha256"] = capture.binding_sha256(self.binding_now())
+        text = json.dumps(rec, indent=1)
+        for f in capture.CONFIRM_FIELDS:
+            text = text.replace('"%s"' % f, '"%s"' % f.replace("_", "\\u005f", 1))
+        self.assertFalse(any(f in text for f in capture.CONFIRM_FIELDS))
+        ev = {"tool_name": "Write", "tool_input": {"file_path": self.record, "content": text}}
+        self.assertEqual(decide(ev, self.dir)[0], "refused")
+
+    def test_2_a_draft_edit_still_runs_and_an_edit_that_does_not_apply_is_refused(self):
+        ok = {"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": '"max": 9500',
+                                                   "new_string": '"max": 9400'}}
+        self.assertEqual(decide(ok, self.dir)[0], "unbound")
+        gone = {"tool_name": "Edit", "tool_input": {"file_path": self.record, "old_string": "no such text",
+                                                     "new_string": '"confirmed_by": "M"'}}
+        decision, lines, _ = decide(gone, self.dir)
+        self.assertEqual(decision, "refused")
+        self.assertIn("does not apply", lines[0])
+
+    # finding 3: the binding is shown and marked
+    def test_3_show_prints_the_binding_step_by_step(self):
+        lines = capture.show_lines(self.rec(), "record.json", self.binding_now())
+        self.assertIn("binding: 1 step (the calls the hook checks)", lines)
+        self.assertIn("  step 1: tool Write, path */outbox/booking.json, kind takes_effect, serves book-offsite, spend",
+                      lines)
+        self.assertIn("  served by no step: deposit, quiet-floor", lines)
+
+    def test_3_an_empty_binding_and_an_unknown_id_are_marked(self):
+        self.assertEqual([(m.path, m.kind) for m in capture.binding_marks(self.rec(), {"steps": []})],
+                         [("steps", capture.BINDING)])
+        b = self.binding_now()
+        b["steps"][0]["binding"]["serves"] = ["book-offsite", "no-such-term"]
+        found = capture.binding_marks(self.rec(), b)
+        self.assertEqual([(m.path, m.kind) for m in found], [("step 1", capture.BINDING)])
+        self.assertIn("no-such-term", found[0].text)
+        self.assertEqual([m.path for m in capture.binding_marks(self.rec(), None)], ["binding.json"])
+
+    # finding 4: the command read as the shell reads its words
+    def test_4_quoted_and_escaped_forms_of_confirm_are_denied(self):
+        for c in ('"as-agreed" confirm', "as-agreed 'confirm'", "as-agreed con''firm", "as-agreed \\confirm",
+                  "$(command -v as-agreed) confirm", "python3 -m 'as_agreed' confirm", "python3 -mas_agreed confirm",
+                  "python3 -c \"import pty; pty.spawn(['as-agreed', 'confirm'])\""):
+            self.assertEqual(decide(bash(c), self.dir)[0], "refused", c)
+        for c in ("as-agreed show; echo confirm", 'git commit -m "confirm the as-agreed docs"'):
+            self.assertNotEqual(decide(bash(c), self.dir)[0], "refused", c)
+
+    # finding 5: the hash covers who confirmed and when
+    def test_5_a_name_or_time_changed_after_the_confirm_stops_the_next_call(self):
+        self.confirmed()
+        self.edit(lambda r: r.update(confirmed_by="Mallory"))
+        decision, lines, _ = decide(booking(), self.dir)
+        self.assertEqual(decision, "refused")
+        self.assertIn("record.json changed after the person confirmed it", lines[0])
+        capture.write_confirm(self.folder, "Ada")
+        self.edit(lambda r: r.update(confirmed_at="2030-01-01T00:00:00+00:00"))
+        self.assertEqual(decide(booking(), self.dir)[0], "refused")
 
 
 class TheOldRecords(unittest.TestCase):
