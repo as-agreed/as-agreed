@@ -17,8 +17,9 @@ You must have Python 3.9 or higher. You do not use an account. The code does not
 ## 2. Run the example
 
 ```
-cp -R examples/plugin-hold /tmp/as-agreed-first-run
-cd /tmp/as-agreed-first-run
+RUN=$(mktemp -d)/run
+cp -R examples/plugin-hold "$RUN"
+cd "$RUN"
 CLAUDE_PROJECT_DIR=$PWD python3 -m as_agreed hook < events/dropped.json
 ```
 
