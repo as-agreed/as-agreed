@@ -184,10 +184,11 @@ sends nothing.</p>
 """
 
 
-def run_folder(root: str, session: Any) -> str:
-    """Where one task's ledger, band and page are kept: `.as-agreed/runs/<session>/` inside the project."""
+def run_folder(root: str, session: Any, record: Optional[str] = None) -> str:
+    """Where one task's ledger, band and page are kept: `runs/<session>/` beside the record, which is the project's
+    `.as-agreed/` unless the hook found it elsewhere (`record`, from `locate.py`)."""
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", str(session or "")) or "session"
-    return os.path.join(root, FOLDER, "runs", safe)
+    return os.path.join(record or os.path.join(root, FOLDER), "runs", safe)
 
 
 # The run folder sits in the project, where the agent can write, and the hook writes there as the person. So each
@@ -232,21 +233,23 @@ def _own_file(where: Any, name: str, flags: int) -> int:
 
 
 class _Run:
-    """The folders `<root>/.as-agreed/runs/<session>/`, each opened as the person's own, closed on leaving."""
+    """The folders `<root>/.as-agreed/runs/<session>/`, or `<record>/runs/<session>/` for a record the hook found
+    elsewhere (the person named that folder, so it is opened as named), each opened as the person's own, closed on
+    leaving."""
 
-    def __init__(self, root: str, session: Any, make: bool):
-        self.root, self.session, self.make = root, session, make
+    def __init__(self, root: str, session: Any, make: bool, record: Optional[str] = None):
+        self.root, self.session, self.make, self.record = root, session, make, record
         self.held: List[int] = []
 
     def __enter__(self) -> Any:
-        root = self.root
-        where: Any = root
+        where: Any = self.record or self.root
+        chain = [] if self.record else [(FOLDER, False)]
+        chain += [("runs", self.make), (os.path.basename(run_folder(self.root, self.session)), self.make)]
         try:
             if _AT:
-                where = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+                where = os.open(where, os.O_RDONLY | os.O_DIRECTORY)
                 self.held.append(where)
-            for name, make in ((FOLDER, False), ("runs", self.make),
-                               (os.path.basename(run_folder(root, self.session)), self.make)):
+            for name, make in chain:
                 where = _own_dir(where, name, make)
                 if _AT:
                     self.held.append(where)
@@ -273,10 +276,10 @@ class _Run:
             f.write("*\n")
 
 
-def calls(root: str, session: Any) -> int:
+def calls(root: str, session: Any, record: Optional[str] = None) -> int:
     """How many calls of this task were checked so far: one hold record each."""
     try:
-        with _Run(root, session, make=False) as run, \
+        with _Run(root, session, make=False, record=record) as run, \
                 os.fdopen(_own_file(run, "ledger.jsonl", os.O_RDONLY), encoding="utf-8") as f:
             return sum(1 for line in f if line.strip() and json.loads(line).get("kind") == "hold")
     except Exception:  # noqa: BLE001 (a ledger that cannot be read must not stop the check: the count starts over)
@@ -298,9 +301,9 @@ def _replace(run: Any, name: str, text: str) -> None:
         raise
 
 
-def write_run(root: str, session: Any, rows: Iterable[Mapping[str, Any]]) -> str:
+def write_run(root: str, session: Any, rows: Iterable[Mapping[str, Any]], record: Optional[str] = None) -> str:
     """Append one checked call's rows to the task's ledger, then rebuild `band.json` and `board.html` from it."""
-    with _Run(root, session, make=True) as run:
+    with _Run(root, session, make=True, record=record) as run:
         fd = _own_file(run, "ledger.jsonl", os.O_RDWR | os.O_APPEND | os.O_CREAT)
         with os.fdopen(fd, "r+", encoding="utf-8") as f:
             for r in rows:
@@ -310,7 +313,7 @@ def write_run(root: str, session: Any, rows: Iterable[Mapping[str, Any]]) -> str
             every = [json.loads(line) for line in f if line.strip()]
         _replace(run, "band.json", json.dumps(state(every), ensure_ascii=False) + "\n")
         _replace(run, "board.html", board_html(every, title=str(session or "")))
-    return run_folder(root, session)
+    return run_folder(root, session, record)
 
 
 def board_temp(rows: Iterable[Mapping[str, Any]]) -> str:

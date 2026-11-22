@@ -61,7 +61,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     for names, text in map_flags:
         dm.add_argument(*names, action="store_true", help=text)
     sub.add_parser("hook", help="the agent plugin's check: a Claude Code PreToolUse event on stdin, checked against "
-                                ".as-agreed/record.json and .as-agreed/binding.json (see as_agreed/hook.py)")
+                                "record.json and binding.json in .as-agreed/, or in the folder AS_AGREED_RECORD or a "
+                                ".as-agreed-record pointer names (see as_agreed/hook.py and as_agreed/locate.py)")
     bd = sub.add_parser("band", help="the band's labels for a run's ledger.jsonl, as JSON; with --board, its Board page "
                                      "(see as_agreed/band.py)")
     bd.add_argument("ledger")
