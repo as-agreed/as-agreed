@@ -9,6 +9,7 @@ Version 0.1.0 of the package does not have the band and the Board. Use the sourc
 ```
 git clone https://github.com/as-agreed/as-agreed
 cd as-agreed
+export PYTHONPATH=$PWD/src
 ```
 
 You must have Python 3.9 or higher. You do not use an account. The code does not use the network.
@@ -18,7 +19,7 @@ You must have Python 3.9 or higher. You do not use an account. The code does not
 ```
 cp -R examples/plugin-hold /tmp/as-agreed-first-run
 cd /tmp/as-agreed-first-run
-CLAUDE_PROJECT_DIR=$PWD PYTHONPATH=<the clone>/src python3 -m as_agreed hook < events/dropped.json
+CLAUDE_PROJECT_DIR=$PWD python3 -m as_agreed hook < events/dropped.json
 ```
 
 The example is an invented order: "Pay the October invoice, up to 18,400 dollars." The call has no `amount`. The hook stops it.
@@ -26,20 +27,20 @@ The example is an invented order: "Pay the October invoice, up to 18,400 dollars
 ## 3. See the band
 
 ```
-PYTHONPATH=<the clone>/src python3 -m as_agreed band .as-agreed/runs/example/ledger.jsonl
+python3 -m as_agreed band .as-agreed/runs/example/ledger.jsonl
 ```
 
-The output has the labels of the band:
+The output is JSON. It starts with the labels of the band:
 
 ```
-Kept as agreed 2 of 3 | held 1 | unchecked 0
+{"labels": ["Kept as agreed 2 of 3", "held 1", "unchecked 0"], "terms": 3, ...
 ```
 
-In Claude Code, the band shows these labels above the prompt. You do not run this command there.
+In Claude Code, the band shows these three labels above the prompt. You do not run this command there.
 
 ## 4. Open the Board
 
-The hook wrote the Board page in step 2. Open it:
+The hook wrote the Board page in step 2. Open it. On macOS, use `open`. On Linux, use `xdg-open`:
 
 ```
 open .as-agreed/runs/example/board.html
