@@ -102,6 +102,8 @@ The first line counts the fields of the `MUST` and `MUST_NOT` commitments at the
 
 Set `baseline_minutes` to your time for a manual check of one run. Then the flag also shows that time when no person must look at the run. Give `baseline_minutes` to `report`, or `--baseline-minutes` to `as-agreed`.
 
+See the band and the Board in four steps: [docs/FIRST-RUN.md](https://github.com/as-agreed/as-agreed/blob/main/docs/FIRST-RUN.md).
+
 ## Use it with Claude Code
 
 ```

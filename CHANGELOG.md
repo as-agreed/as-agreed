@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `docs/FIRST-RUN.md` gives four steps to the Board: get the code, run the example, see the band, open the Board.
 - In Claude Code, the plugin shows a band above the prompt. It counts the binding terms of the task. It shows the terms kept as agreed, the terms held, and the terms that code cannot check. It also counts a term that changed and that no hold stopped, but only when there is one. These are the counts of the flag.
 - The band has a button, Board. When you click it, it makes a new page on your machine and opens it. The page lists each binding term of the task: what was agreed, what arrived, and the result. It marks each term that was lost. The page loads nothing and sends nothing.
 - The hook writes the records of each check to `.as-agreed/runs/<session>/ledger.jsonl`, with `band.json` and `board.html` next to it. These files hold the values of the calls. A `.gitignore` in `runs/` keeps them out of your commits. Only your user account can read them. They stay on this machine until you delete `.as-agreed/runs/`.
