@@ -14,7 +14,7 @@ The library runs today, on your computer. The record is a file on your disk. The
 
 After version 0.2, the As-Agreed service will keep the same record for all your runs and teams, over time.
 
-Version 0.1.1 adds the band and the Board in Claude Code, and reads a quantity in number words as its number.
+Version 0.1.1 adds the band and the Board in Claude Code. It also reads a quantity in number words as its number.
 
 ## Run the demo
 
