@@ -66,6 +66,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                                      "(see as_agreed/band.py)")
     bd.add_argument("ledger")
     bd.add_argument("--board", default=None, help="write the Board page, one HTML file that loads nothing, here")
+    bd.add_argument("--board-temp", action="store_true",
+                    help="the Board button's call: read the ledger only as a regular file, never through a link, write "
+                         "the page to a new private temporary file and give its path in the JSON as `board`")
     cf = sub.add_parser("conformance", help="run the suite of SPEC §10 against an adapter registered by name (default: plain)")
     cf.add_argument("adapter", nargs="?", default="plain", help="plain; langgraph and temporal when their adapters land")
     cf.add_argument("--only", default="", help="comma-separated sentence ids")
@@ -115,7 +118,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return hook(sys.stdin.read())
     if a.cmd == "band":
         from .band import main as band
-        return band(a.ledger, a.board)
+        return band(a.ledger, a.board, a.board_temp)
     if a.cmd == "conformance":
         from .conformance import run_suite, load_factory
         results = run_suite(load_factory(a.adapter), only=[s for s in a.only.split(",") if s.strip()] or None)

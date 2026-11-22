@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
 import unittest
@@ -180,6 +181,128 @@ class TheHookWritesTheRun(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(p.dir, ".as-agreed", "runs")))
 
 
+POSIX = os.name == "posix"
+
+
+@unittest.skipUnless(POSIX, "links, modes and FIFOs as a POSIX disk has them")
+class TheRunFolderIsTheHooksOwn(unittest.TestCase):
+    """The agent can write in the project; the hook runs as the person. A link the agent plants in the run folder
+    must not carry the hook's writes out of it (security review of ASAG-23, findings 1 and 2)."""
+
+    def setUp(self):
+        self.outside = tempfile.mkdtemp()
+        self.target = os.path.join(self.outside, "profile")
+        self.reset()
+
+    def tearDown(self):
+        shutil.rmtree(self.outside)
+
+    def reset(self):
+        """Each case starts from an untouched outside folder: one file, a line the person wrote."""
+        for name in os.listdir(self.outside):
+            path = os.path.join(self.outside, name)
+            shutil.rmtree(path) if os.path.isdir(path) and not os.path.islink(path) else os.remove(path)
+        Path(self.target).write_text("untouched\n")
+
+    def held_call(self, p, session="fixture-held"):
+        code, answer = p.call(event("held", session))
+        self.assertEqual(code, 0)
+        self.assertTrue(denied(answer))
+
+    def assert_outside_untouched(self):
+        self.assertEqual(Path(self.target).read_text(), "untouched\n")
+        self.assertEqual(sorted(os.listdir(self.outside)), ["profile"])
+
+    def plant(self, p, name, to=None):
+        folder = p.folder("fixture-held")
+        os.makedirs(folder, exist_ok=True)
+        os.symlink(to or self.target, os.path.join(folder, name))
+        return folder
+
+    def test_a_link_at_any_file_of_the_run_is_not_written_through(self):
+        for name in ("board.html.tmp", "band.json.tmp", "board.html", "band.json", "ledger.jsonl"):
+            self.reset()
+            with self.subTest(name=name), Project() as p:
+                self.plant(p, name)
+                self.held_call(p)
+                self.assert_outside_untouched()
+
+    def test_a_link_at_the_gitignore_is_not_written_through(self):
+        for to in (self.target, os.path.join(self.outside, "made-by-the-hook")):  # an existing file, a dangling link
+            self.reset()
+            with self.subTest(to=to), Project() as p:
+                runs = os.path.join(p.dir, ".as-agreed", "runs")
+                os.makedirs(runs)
+                os.symlink(to, os.path.join(runs, ".gitignore"))
+                self.held_call(p)
+                self.assert_outside_untouched()
+
+    def test_a_linked_runs_folder_or_run_folder_gets_nothing(self):
+        for linked in ("runs", "run"):
+            self.reset()
+            with self.subTest(linked=linked), Project() as p:
+                runs = os.path.join(p.dir, ".as-agreed", "runs")
+                if linked == "runs":
+                    os.symlink(self.outside, runs)
+                else:
+                    os.makedirs(runs)
+                    os.symlink(self.outside, p.folder("fixture-held"))
+                self.held_call(p)
+                self.assert_outside_untouched()
+
+    def test_a_linked_as_agreed_folder_is_checked_but_gets_no_run(self):
+        with Project() as p:
+            real = os.path.join(self.outside, "real")
+            shutil.move(os.path.join(p.dir, ".as-agreed"), real)
+            os.symlink(real, os.path.join(p.dir, ".as-agreed"))
+            self.held_call(p)
+            self.assertFalse(os.path.exists(os.path.join(real, "runs")))
+
+    def test_a_fifo_at_the_ledger_does_not_stall_the_check(self):
+        import signal
+        with Project() as p:
+            folder = p.folder("fixture-held")
+            os.makedirs(folder)
+            os.mkfifo(os.path.join(folder, "ledger.jsonl"))
+            signal.signal(signal.SIGALRM, lambda *a: (_ for _ in ()).throw(TimeoutError("the hook stalled")))
+            signal.alarm(5)
+            try:
+                self.held_call(p)
+            finally:
+                signal.alarm(0)
+
+    def test_the_run_is_readable_by_the_person_alone(self):
+        with Project() as p:
+            self.held_call(p)
+            folder = p.folder("fixture-held")
+            mode = lambda path: stat.S_IMODE(os.lstat(path).st_mode)  # noqa: E731
+            self.assertEqual(mode(os.path.dirname(folder)), 0o700)
+            self.assertEqual(mode(folder), 0o700)
+            for name in ("ledger.jsonl", "band.json", "board.html"):
+                self.assertEqual(mode(os.path.join(folder, name)), 0o600, name)
+            self.assertEqual(mode(os.path.join(os.path.dirname(folder), ".gitignore")), 0o600)
+            self.assertEqual(sorted(os.listdir(folder)), ["band.json", "board.html", "ledger.jsonl"])  # no temp left
+
+    def test_the_count_of_calls_reads_no_link(self):
+        with Project() as p:
+            self.held_call(p, "s1")
+            ledger = os.path.join(p.folder("s1"), "ledger.jsonl")
+            self.assertEqual(band.calls(p.dir, "s1"), 1)
+            os.makedirs(p.folder("s2"))
+            os.symlink(ledger, os.path.join(p.folder("s2"), "ledger.jsonl"))
+            self.assertEqual(band.calls(p.dir, "s2"), 0)
+
+
+class TheRunFolderByPath(TheRunFolderIsTheHooksOwn):
+    """The same cases where the system has no folder handles (Windows): each folder is checked with lstat."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(band, "_AT", False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
 class TheBoard(unittest.TestCase):
     def test_the_page_loads_nothing(self):
         for name in MOCK:
@@ -225,6 +348,36 @@ class TheBoard(unittest.TestCase):
             self.assertEqual(json.loads(out.getvalue())["labels"], MOCK["held"])
             with open(page, encoding="utf-8") as f:
                 self.assertEqual(loads(f.read()), 0)
+
+    def test_the_button_s_page_is_built_fresh_in_a_private_file(self):
+        """The Board button opens the page this command builds at click time, never the run folder's board.html,
+        which the agent can rewrite (security review of ASAG-23, finding 4)."""
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli(["band", str(FIX / "held.ledger.jsonl"), "--board-temp"]), 0)
+        page = json.loads(out.getvalue())["board"]
+        try:
+            self.assertTrue(os.path.isabs(page) and page.endswith(".html"))
+            self.assertNotEqual(os.path.dirname(page), str(FIX))
+            if POSIX:
+                self.assertEqual(stat.S_IMODE(os.lstat(page).st_mode), 0o600)
+            with open(page, encoding="utf-8") as f:
+                html = f.read()
+            self.assertEqual(loads(html), 0)
+            self.assertIn("at most 18,400 USD", html)
+        finally:
+            os.remove(page)
+
+    @unittest.skipUnless(POSIX, "links as a POSIX disk has them")
+    def test_the_button_s_page_is_not_built_from_a_linked_ledger(self):
+        with tempfile.TemporaryDirectory() as d:
+            link = os.path.join(d, "ledger.jsonl")
+            os.symlink(str(FIX / "held.ledger.jsonl"), link)
+            out, err = io.StringIO(), io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                self.assertEqual(cli(["band", link, "--board-temp"]), 2)
+            self.assertEqual(out.getvalue(), "")
+            self.assertIn("not a regular file", err.getvalue())
 
 
 if __name__ == "__main__":

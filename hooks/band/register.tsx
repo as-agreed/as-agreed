@@ -5,7 +5,7 @@ import type { Band } from './types'
 
 // The As-Agreed band, above the prompt: what the plugin's hook wrote for this task in
 // .as-agreed/runs/<session>/band.json (src/as_agreed/band.py, from the task's ledger.jsonl). Nothing here counts:
-// it reads that file, draws its labels, and its "Board" button opens board.html from the same folder.
+// it reads that file and draws its labels. Its "Board" button has the library build the page at the click.
 // Needs Claude Code 2.1.290 or later, in the terminal or the desktop app; elsewhere the hook's own line still shows.
 const band = atom({ plugin: 'as-agreed', key: 'band' } as const, null)
 
@@ -28,12 +28,38 @@ async function refresh($: EngineInterface) {
   await update($, band, () => next)
 }
 
-// The page is a local file that loads nothing; the system's own opener shows it.
+// The page is built at the click, by the library, from the task's ledger into a new private temporary file. The run
+// folder's board.html is never opened: the agent can rewrite it between two checks (security review, finding 4).
+async function buildBoard($: EngineInterface): Promise<string> {
+  const plugin = (await $.process.hookEnv()).CLAUDE_PLUGIN_ROOT
+  if (plugin === undefined || plugin === '') throw new Error('as-agreed: no plugin folder')
+  const ledger = `${await folder($)}/ledger.jsonl`
+  const built = await $.process.run(['python3', '-m', 'as_agreed', 'band', ledger, '--board-temp'], {
+    cwd: `${plugin}/src`,
+    timeoutMs: 30000,
+  })
+  const page: unknown = built.exitCode === 0 ? JSON.parse(built.stdout).board : undefined
+  if (typeof page !== 'string' || page === '') throw new Error('as-agreed: the Board page was not built')
+  return page
+}
+
+// What cmd.exe reads as its own. A path that holds one is handed to no opener; the toast shows it (finding 3).
+const CMD_READS = /[&|<>^%"()!]/
+
+// The page loads nothing; the system's own opener shows it, and no shell reads its path.
 async function openBoard($: EngineInterface) {
-  const file = `${await folder($)}/board.html`
-  const windows = (await $.env.get('OS')) === 'Windows_NT'
-  const mac = !windows && (await $.process.run(['uname'])).stdout.trim() === 'Darwin'
-  await $.process.run(windows ? ['cmd', '/c', 'start', '', file] : [mac ? 'open' : 'xdg-open', file])
+  const file = await buildBoard($)
+  if ((await $.env.get('OS')) === 'Windows_NT') {
+    if (CMD_READS.test(file)) {
+      $.ui.toast(`as-agreed: open the Board page yourself: ${file}`)
+      return
+    }
+    // explorer.exe reads "/" as a switch, and returns 1 when it has opened the file, so its code is not read.
+    await $.process.run(['explorer.exe', file.replace(/\//g, '\\')])
+    return
+  }
+  const mac = (await $.process.run(['uname'])).stdout.trim() === 'Darwin'
+  await $.process.run([mac ? 'open' : 'xdg-open', file])
 }
 
 export const register: Register = on => {

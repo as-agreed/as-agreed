@@ -13,11 +13,15 @@ Stdlib only; nothing here opens a network connection or starts a program.
 from __future__ import annotations
 
 import datetime
+import errno
 import html
 import json
 import os
 import re
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+import stat
+import sys
+import tempfile
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from .drift import MISSING, get_path
 from .hold import flag, tally, term_name
@@ -25,8 +29,9 @@ from .hold import flag, tally, term_name
 FOLDER = ".as-agreed"
 
 
-def read_rows(path: str) -> List[Dict[str, Any]]:
-    with open(path, encoding="utf-8") as f:
+def read_rows(path: str, own: bool = False) -> List[Dict[str, Any]]:
+    """The rows of a `ledger.jsonl`. `own`: only a regular file, never through a link (what the Board button reads)."""
+    with (os.fdopen(_own_file(None, path, os.O_RDONLY), encoding="utf-8") if own else open(path, encoding="utf-8")) as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
@@ -185,46 +190,152 @@ def run_folder(root: str, session: Any) -> str:
     return os.path.join(root, FOLDER, "runs", safe)
 
 
+# The run folder sits in the project, where the agent can write, and the hook writes there as the person. So each
+# folder of the run is opened without following a link and held open, and each file is made or opened relative to
+# it, never through a link (security review of ASAG-23, findings 1 and 2). Where the system has no folder handles
+# (Windows), each folder is checked with lstat instead. Folders are 0o700 and files 0o600: the carried values are the
+# person's alone.
+_AT = hasattr(os, "O_DIRECTORY") and {os.open, os.mkdir, os.rename, os.unlink} <= os.supports_dir_fd
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+_NONBLOCK = getattr(os, "O_NONBLOCK", 0)  # a FIFO planted at a file's name never holds the hook up
+
+
+def _in(where: Any, name: str) -> Tuple[str, Dict[str, int]]:
+    """A name in a held folder (a handle) or in a checked one (a path), with the keyword the call needs."""
+    return (name, {"dir_fd": where}) if _AT else (os.path.join(where, name), {})
+
+
+def _own_dir(where: Any, name: str, make: bool) -> Any:
+    """The folder `name` in `where`, made 0o700 when asked and not there yet; refused when it is a link or not a
+    folder."""
+    path, at = _in(where, name)
+    if make:
+        try:
+            os.mkdir(path, 0o700, **at)
+        except FileExistsError:
+            pass
+    if _AT:
+        return os.open(path, os.O_RDONLY | os.O_DIRECTORY | _NOFOLLOW, **at)
+    if not stat.S_ISDIR(os.lstat(path).st_mode):
+        raise OSError(f"{path} is a link or not a folder")
+    return path
+
+
+def _own_file(where: Any, name: str, flags: int) -> int:
+    """A file of the run, opened 0o600 without following a link, and only when it is a regular file."""
+    path, at = _in(where, name) if where is not None else (name, {})
+    fd = os.open(path, flags | _NOFOLLOW | _NONBLOCK, 0o600, **at)
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise OSError(f"{path} is not a regular file")
+    return fd
+
+
+class _Run:
+    """The folders `<root>/.as-agreed/runs/<session>/`, each opened as the person's own, closed on leaving."""
+
+    def __init__(self, root: str, session: Any, make: bool):
+        self.root, self.session, self.make = root, session, make
+        self.held: List[int] = []
+
+    def __enter__(self) -> Any:
+        root = self.root
+        where: Any = root
+        try:
+            if _AT:
+                where = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+                self.held.append(where)
+            for name, make in ((FOLDER, False), ("runs", self.make),
+                               (os.path.basename(run_folder(root, self.session)), self.make)):
+                where = _own_dir(where, name, make)
+                if _AT:
+                    self.held.append(where)
+                if name == "runs" and self.make:
+                    self._ignore(where)
+        except BaseException:
+            self.__exit__()
+            raise
+        return where
+
+    def __exit__(self, *exc: Any) -> None:
+        for fd in reversed(self.held):
+            os.close(fd)
+
+    @staticmethod
+    def _ignore(runs: Any) -> None:
+        """`runs/.gitignore`, made once, never through a link: the values of the calls stay out of commits."""
+        path, at = _in(runs, ".gitignore")
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o600, **at)
+        except FileExistsError:
+            return
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("*\n")
+
+
 def calls(root: str, session: Any) -> int:
     """How many calls of this task were checked so far: one hold record each."""
     try:
-        return sum(1 for r in read_rows(os.path.join(run_folder(root, session), "ledger.jsonl"))
-                   if r.get("kind") == "hold")
+        with _Run(root, session, make=False) as run, \
+                os.fdopen(_own_file(run, "ledger.jsonl", os.O_RDONLY), encoding="utf-8") as f:
+            return sum(1 for line in f if line.strip() and json.loads(line).get("kind") == "hold")
     except Exception:  # noqa: BLE001 (a ledger that cannot be read must not stop the check: the count starts over)
         return 0
 
 
-def _replace(path: str, text: str) -> None:
-    """Written whole, then moved in place, so the band never reads half a file."""
-    with open(path + ".tmp", "w", encoding="utf-8") as f:
-        f.write(text)
-    os.replace(path + ".tmp", path)
+def _replace(run: Any, name: str, text: str) -> None:
+    """Written whole under a new name of its own, then moved in place: the band never reads half a file, and a link
+    planted at either name is replaced, never written through."""
+    tmp, at = _in(run, f".{name}.{os.urandom(8).hex()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW, 0o600, **at)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        dst, _ = _in(run, name)
+        os.replace(tmp, dst, **({"src_dir_fd": run, "dst_dir_fd": run} if _AT else {}))
+    except BaseException:
+        os.unlink(tmp, **at)
+        raise
 
 
 def write_run(root: str, session: Any, rows: Iterable[Mapping[str, Any]]) -> str:
     """Append one checked call's rows to the task's ledger, then rebuild `band.json` and `board.html` from it."""
-    runs = os.path.join(root, FOLDER, "runs")
-    os.makedirs(runs, exist_ok=True)
-    ignore = os.path.join(runs, ".gitignore")
-    if not os.path.exists(ignore):  # the values of the calls stay out of the project's commits
-        with open(ignore, "w", encoding="utf-8") as f:
-            f.write("*\n")
-    folder = run_folder(root, session)
-    os.makedirs(folder, exist_ok=True)
-    ledger = os.path.join(folder, "ledger.jsonl")
-    with open(ledger, "a", encoding="utf-8") as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
-    every = read_rows(ledger)
-    _replace(os.path.join(folder, "band.json"), json.dumps(state(every), ensure_ascii=False) + "\n")
-    _replace(os.path.join(folder, "board.html"), board_html(every, title=str(session or "")))
-    return folder
+    with _Run(root, session, make=True) as run:
+        fd = _own_file(run, "ledger.jsonl", os.O_RDWR | os.O_APPEND | os.O_CREAT)
+        with os.fdopen(fd, "r+", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+            f.flush()
+            f.seek(0)
+            every = [json.loads(line) for line in f if line.strip()]
+        _replace(run, "band.json", json.dumps(state(every), ensure_ascii=False) + "\n")
+        _replace(run, "board.html", board_html(every, title=str(session or "")))
+    return run_folder(root, session)
 
 
-def main(path: str, board: Optional[str] = None) -> int:
-    rows = read_rows(path)
+def board_temp(rows: Iterable[Mapping[str, Any]]) -> str:
+    """The Board page in a new private file (0o600) of the system's temporary folder; its path. The Board button
+    opens this, built at the click, never the run folder's `board.html`, which the agent can rewrite."""
+    fd, path = tempfile.mkstemp(prefix="as-agreed-board-", suffix=".html")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(board_html(rows))
+    return path
+
+
+def main(path: str, board: Optional[str] = None, board_temp_: bool = False) -> int:
+    """`board_temp_` (the button's own call): the ledger is read only as a regular file, never through a link, and the
+    page goes to a new private file whose path the JSON gives as `board`."""
+    try:
+        rows = read_rows(path, own=board_temp_)
+    except OSError as e:
+        why = "a link, not a regular file" if e.errno == errno.ELOOP else (e.strerror or str(e))
+        print(f"as-agreed band: {path} cannot be read: {why}", file=sys.stderr)
+        return 2
     if board:
         with open(board, "w", encoding="utf-8") as f:
             f.write(board_html(rows))
-    print(json.dumps(state(rows), ensure_ascii=False))
+    out = state(rows)
+    if board_temp_:
+        out["board"] = board_temp(rows)
+    print(json.dumps(out, ensure_ascii=False))
     return 0
