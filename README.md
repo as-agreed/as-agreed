@@ -120,11 +120,11 @@ See the band and the Board in four steps: [docs/FIRST-RUN.md](https://github.com
 /plugin install as-agreed@as-agreed
 ```
 
-The plugin adds a skill and a hook. The skill tells the agent to write the agreed record, with your words for each term (`said`), and the binding in `.as-agreed/`. Run `as-agreed show` to read each term and its marks. Then run `as-agreed confirm` in your own terminal. It reads your name from the terminal and writes `confirmed_by`, `confirmed_at` and two hashes. The hook stops a file tool that writes one of these fields. The hook uses the record only after `confirmed_by` has a name.
+The plugin adds a skill and a hook. The skill tells the agent to write the agreed record and the binding in `.as-agreed/`. The record has your words for each term (`said`). Run `as-agreed show` to read each term and its marks. Then run `as-agreed confirm` in your own terminal. It reads your name from the terminal and writes `confirmed_by`, `confirmed_at` and two hashes. The hook stops a file tool that writes one of these fields. The hook uses the record only after `confirmed_by` has a name.
 
-After the confirm, the hook stops every call while the record or the binding differs from its hash, until you confirm again. It does not stop a program that writes the hashes again, or removes both. A record confirmed by hand, as in 0.1.2, still works.
+After the confirm, the hook stops every call while the record or the binding differs from its hash. Confirm again to go on. It does not stop a program that writes the hashes again, or removes both. A record confirmed by hand, as in 0.1.2, still works.
 
-The hook runs before each tool call. It checks only the calls in `.as-agreed/binding.json`. It stops a call if a term changed, or if a must term is missing. It also stops a file tool that changes the record after the confirm. Each checked call writes one line to `hook.jsonl` next to the record that the hook found, without the values of the call. The hook uses `python3`, version 3.9 or higher. It uses the `src/` folder of the plugin, and it does not use the network.
+The hook runs before each tool call. It checks only the calls in `.as-agreed/binding.json`. It stops a call if a term changed, or if a must term is missing. It also stops a file tool that changes the record after the confirm. Each checked call writes one line to `hook.jsonl`, without the values of the call. That file is next to the record that the hook found. The hook uses `python3`, version 3.9 or higher. It uses the `src/` folder of the plugin, and it does not use the network.
 
 Run the hook on the example, with no agent. The package has the example:
 
@@ -166,7 +166,7 @@ python3 ledger.py run examples/planted-failure --against-all --only hedged,not_f
 
 ## Its limits
 
-It compares only the fields that you declare, and it does not read a field from text. A declared value in English number words counts as its number, so "three" is 3. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` in the folder where Claude Code starts, or the folder that `AS_AGREED_RECORD` or `.as-agreed-record` names. The hook checks each call alone, so it does not hold a term that an earlier call lost. The band keeps the values of each checked call in `runs/` next to the record that the hook found, on this machine, until you delete that folder.
+It compares only the fields that you declare, and it does not read a field from text. A declared value in English number words counts as its number, so "three" is 3. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` in the folder where Claude Code starts, or the folder that `AS_AGREED_RECORD` or `.as-agreed-record` names. The hook checks each call alone, so it does not hold a term that an earlier call lost. The band keeps the values of each checked call in `runs/`, next to the record that the hook found. They stay on this machine until you delete that folder.
 
 ## Where this goes
 

@@ -2,8 +2,8 @@
 
 ## 0.1.3, 2026-11-25
 
-- `as-agreed show` prints each term of the record with the person's words for it, from `said`. It marks a quote that is not in the order, and a value that differs from its words. It also marks a number or date with no words, a hidden character, and a binding step that serves no term.
-- `as-agreed confirm` is the person's one step. It reads the name from their own terminal, never from a pipe. It writes `confirmed_by`, `confirmed_at` and two hashes, of the record and of the binding.
+- `as-agreed show` prints each term of the record with the person's words for it, from `said`. It marks a quote that is not in the order, and a value that differs from its words. It also marks a number or date with no words, and a hidden character. It marks a binding step that serves no term.
+- `as-agreed confirm` is the person's one step. It reads the name from their own terminal. It does not read a name from a pipe. It writes `confirmed_by`, `confirmed_at` and two hashes, of the record and of the binding.
 - After the confirm, the hook stops every call while the record or the binding differs from its hash. It does not stop a program that writes both hashes again, or removes them.
 - The hook stops a file tool that writes `confirmed_by`, `confirmed_at` or a hash. It also stops the plain forms of an agent's call that runs `as-agreed confirm`.
 - A file tool that changes a confirmed record gets the reason that the record is frozen. A record confirmed by hand, as in 0.1.2, still works.
