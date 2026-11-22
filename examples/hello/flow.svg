@@ -21,5 +21,5 @@
 <text class="sub" x="1250.0" y="535.0" text-anchor="start">flow stops here</text>
 <text class="fn" x="230" y="628">6 claims, 1 hop(s). Matching: explicit [c:id] tags, else a third of content words (at least two; two thirds for a must-travel claim) on one line, else a 60-character substring.</text>
 <text class="fn" x="230" y="646">Paraphrase and translation are missed, and a line sharing enough words can pass for a claim, so 'dropped' and 'present' are approximate.</text>
-<text class="fn" x="230" y="664">Generated 2026-11-04T21:25:14Z by ledger.py; no claim text in this file.</text>
+<text class="fn" x="230" y="664">Generated 2026-11-22T15:40:07Z by ledger.py; no claim text in this file.</text>
 </svg>

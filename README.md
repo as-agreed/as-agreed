@@ -14,7 +14,7 @@ The library runs today, on your computer. The record is a file on your disk. The
 
 After version 0.2, the As-Agreed service will keep the same record for all your runs and teams, over time.
 
-Version 0.1.0 adds a binding for each step, a flag after each run, and a plugin for Claude Code.
+Version 0.1.1 adds the band and the Board in Claude Code, and reads a quantity in number words as its number.
 
 ## Run the demo
 
@@ -148,7 +148,7 @@ python3 ledger.py run examples/planted-failure --against-all --only hedged,not_f
 
 ## Its limits
 
-It compares only the fields that you declare, and it does not read a field from text. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` only in the folder where Claude Code starts. The band keeps the values of each checked call in `.as-agreed/runs/` on this machine, until you delete that folder.
+It compares only the fields that you declare, and it does not read a field from text. A declared value in English number words counts as its number, so "three" is 3. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` only in the folder where Claude Code starts. The band keeps the values of each checked call in `.as-agreed/runs/` on this machine, until you delete that folder.
 
 ## Where this goes
 
