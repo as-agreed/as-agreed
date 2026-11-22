@@ -275,7 +275,7 @@ class _Execution:
         for f in failures:
             self.rec(f)
         h = decide(verdicts, agreed, pol, failures, run_id=ctx.run_id, link_id=lid, attempt=self.attempt, ts=ts,
-                   pipeline=ctx.pipeline)
+                   pipeline=ctx.pipeline, earlier=[r for r in self.ad.records(ctx.run_id) if r.get("link") != lid])
         self.rec(h.record())
         self.rec({"kind": "flag", "format": FORMAT, "pipeline": ctx.pipeline, "run_id": ctx.run_id, "link": lid,
                   "lines": flag(self.ad.records(ctx.run_id)), "ts": ts})

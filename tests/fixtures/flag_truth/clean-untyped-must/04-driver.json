@@ -1,0 +1,13 @@
+{
+ "guests": {
+  "max": 120
+ },
+ "serve_by": {
+  "until": "2031-05-09"
+ },
+ "menu": {
+  "in": [
+   "vegetarian"
+  ]
+ }
+}

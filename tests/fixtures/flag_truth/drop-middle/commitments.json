@@ -1,0 +1,58 @@
+{
+ "commitments": [
+  {
+   "commitment_id": "guests",
+   "act": "Guests",
+   "obligor": "the-caterer",
+   "obligee": "the-host",
+   "modality": "MUST",
+   "limit": {
+    "guests": {
+     "max": 120
+    }
+   },
+   "carried_by": {
+    "limit.guests": "guests"
+   }
+  },
+  {
+   "commitment_id": "serve_by",
+   "act": "Serve by",
+   "obligor": "the-caterer",
+   "obligee": "the-host",
+   "modality": "MUST",
+   "limit": {
+    "serve_by": {
+     "until": "2031-05-09"
+    }
+   },
+   "carried_by": {
+    "limit.serve_by": "serve_by"
+   }
+  },
+  {
+   "commitment_id": "menu",
+   "act": "Menu",
+   "obligor": "the-caterer",
+   "obligee": "the-host",
+   "modality": "MUST",
+   "limit": {
+    "menu": {
+     "in": [
+      "vegetarian"
+     ]
+    }
+   },
+   "carried_by": {
+    "limit.menu": "menu"
+   }
+  }
+ ],
+ "proxy": true,
+ "drafter": {
+  "model": "code",
+  "version": "fixture-1",
+  "date": "2026-11-22",
+  "prompt_id": "none"
+ }
+}
