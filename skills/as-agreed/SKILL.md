@@ -17,14 +17,14 @@ The hook checks a tool call only when the folder where Claude Code starts has `.
  "commitments": [{"commitment_id": "pay-invoice", "act": "pay the October invoice",
                   "obligor": "finance-ops", "obligee": "northwind-freight", "modality": "MUST",
                   "limit": {"amount": {"max": 18400, "unit": "USD"}},
-                  "carried_by": {"act": "act", "limit.amount": "amount"}}],
+                  "carried_by": {"limit.amount": "amount"}}],
  "confirmed_by": "", "confirmed_at": ""}
 ```
 
 - Write one commitment for each item that must occur. A commitment must have `act`, `obligor`, `obligee` and `modality`.
 - Write each number as a limit with a direction: `max`, `min`, `until`, `from`, `in` or `not_in`.
 - Write a date as `YYYY-MM-DD`.
-- In `carried_by`, give the key of the output that has each field. As-Agreed does not check a field with no key.
+- In `carried_by`, give a key only to a value that the call uses, for example the amount that it pays. Do not copy the words of the order into the output: a copied value counts as kept and checks nothing.
 - Use only what the person gives. If a value is not clear, stop and tell the person. Do not add a value.
 
 ## 2. Write the binding: `.as-agreed/binding.json`

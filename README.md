@@ -19,9 +19,11 @@ Version 0.1.2 holds a term that a middle step lost and that no hold stopped. The
 ## Run the demo
 
 ```
-pip install as-agreed
+python3 -m pip install as-agreed
 as-agreed demo --no-retry
 ```
+
+If the shell does not find `as-agreed`, use `python3 -m as_agreed` in place of `as-agreed`.
 
 Or run it from the source, with no package:
 
@@ -121,11 +123,13 @@ The hook runs before each tool call. It checks only the calls in `.as-agreed/bin
 Run the hook on the example, with no agent. The package has the example:
 
 ```
-pip install as-agreed
+python3 -m pip install as-agreed
 as-agreed example plugin-hold run
 cd run
 CLAUDE_PROJECT_DIR=$PWD as-agreed hook < events/dropped.json
 ```
+
+If the shell does not find `as-agreed`, use `python3 -m as_agreed` in place of `as-agreed`.
 
 The output stops the call, because the field `limit.amount` is `DROPPED`. The file `events/faithful.json` passes. The command `as-agreed example` writes only into a new or empty folder.
 

@@ -27,7 +27,7 @@ from as_agreed.locate import ENV, POINTER, locate  # noqa: E402
 
 EXAMPLE = ROOT / "examples" / "plugin-hold"
 FIX = ROOT / "tests" / "fixtures" / "locate"
-FAITHFUL = "Kept as agreed: 3 of 3 binding terms, checked at delivery; 0 held; 0 unchecked"
+FAITHFUL = "Kept as agreed: 1 of 1 binding terms, checked at delivery; 0 held; 0 unchecked"
 SH = shutil.which("sh")
 ROOT_USER = hasattr(os, "getuid") and os.getuid() == 0
 

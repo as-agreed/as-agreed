@@ -4,6 +4,6 @@
  "tool_name": "Write",
  "tool_input": {
   "file_path": "project/outbox/payment.json",
-  "content": "{\"payer\": \"finance-ops\", \"act\": \"pay the October invoice from Northwind Freight\", \"amount\": 19800}"
+  "content": "{\"reference\": \"R-0417\", \"amount\": 19800}"
  }
 }

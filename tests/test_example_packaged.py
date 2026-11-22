@@ -30,7 +30,7 @@ PACKAGED = PACKAGE / "examples" / "plugin-hold"
 AT_ROOT = ROOT / "examples" / "plugin-hold"
 FILES = [".as-agreed/binding.json", ".as-agreed/record.json", "events/dropped.json", "events/faithful.json",
          "events/widened.json"]
-FAITHFUL = "Kept as agreed: 3 of 3 binding terms, checked at delivery; 0 held; 0 unchecked"
+FAITHFUL = "Kept as agreed: 1 of 1 binding terms, checked at delivery; 0 held; 0 unchecked"
 ROOT_USER = hasattr(os, "getuid") and os.getuid() == 0
 
 
