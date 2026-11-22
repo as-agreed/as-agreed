@@ -169,8 +169,8 @@ class NotRestatedUntyped(unittest.TestCase):
 class TypedHeadline(unittest.TestCase):
     def test_the_headline_counts_typed_terms_and_untyped_fields_have_their_own_line(self):
         _, lines = reconcile("clean-untyped-must")
-        self.assertEqual(headline(lines), "Kept as agreed: 3 of 3 binding terms, checked at delivery; 0 held; "
-                                          "0 unchecked")
+        self.assertEqual(headline(lines), "Kept as agreed: 3 of 3 binding terms, checked at delivery; 0 held (the "
+                                          "run is held by 1 untyped term: prose_1 MUST); 0 unchecked")
         # 4 binding commitments, each with obligor, obligee, act and modality that no link declared
         self.assertIn("Not checked by code: 16 untyped fields of binding terms (obligor, obligee, act, modality), "
                       "declared at no link", lines)
@@ -178,7 +178,8 @@ class TypedHeadline(unittest.TestCase):
     def test_a_chain_with_no_typed_term_still_prints_a_flag_the_lab_reads(self):
         code, lines = reconcile("prose-only")
         self.assertEqual(code, 1)
-        self.assertEqual(headline(lines), "Kept as agreed: no binding term was checked in this run")
+        self.assertEqual(headline(lines), "Kept as agreed: no binding term was checked in this run; the run is "
+                                          "held by 1 untyped term: prose_1 MUST")
         self.assertIn("1 held (prose_1 MUST: Label every tray with its allergens)", untyped_line(lines))
 
     def test_a_review_baseline_counts_untyped_fields_as_waiting(self):
