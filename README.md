@@ -14,7 +14,7 @@ The library runs today, on your computer. The record is a file on your disk. The
 
 After version 0.2, the As-Agreed service will keep the same record for all your runs and teams, over time.
 
-Version 0.1.1 adds the band and the Board in Claude Code. It also reads a quantity in number words as its number.
+Version 0.1.2 holds a term that a middle step lost and that no hold stopped. The hook finds the record when the agent starts in a throwaway folder. The example of the hook is in the package.
 
 ## Run the demo
 
@@ -94,11 +94,14 @@ A `takes_effect` step must have `obligor` only if the `author` or the `recipient
 After the gate, the report and the demo show the flag. The demo with `--no-retry` shows these lines:
 
 ```
-Kept as agreed: 0 of 5 binding terms, checked at delivery; 1 held (pay-invoice limit.amount WIDENED: 19800 where at most 18400 USD was agreed); 4 unchecked
-0 of 5 terms kept that would have been lost
+Kept as agreed: 0 of 1 binding terms, checked at delivery; 1 held (pay-invoice limit.amount WIDENED: 19800 where at most 18400 USD was agreed); 0 unchecked
+0 of 1 terms kept that would have been lost
+Not checked by code: 4 untyped fields of binding terms (obligor, obligee, act, modality), declared at no link
 ```
 
-The first line counts the fields of the `MUST` and `MUST_NOT` commitments at their last check. It names each field that a hold stops, and each field that changed with no hold. The next line counts the fields that arrive as agreed only because a hold made the step run again. It also gives the total of their agreed limits that have a unit such as `USD`. Each step also writes these lines to `ledger.jsonl`.
+The first line counts the declared fields of the `MUST` and `MUST_NOT` commitments. It names each field that a hold stops, and each field that changed with no hold. The last step holds a field that an earlier step lost when no hold stopped it there, also if a later step gives it back. The next line counts the fields that arrive as agreed only because a hold made the step run again. It also gives the total of their agreed limits that have a unit such as `USD`. Each step also writes these lines to `ledger.jsonl`.
+
+Code does not check the fields `obligor`, `obligee`, `act` and `modality` when no step declares them. The flag counts them on a line of their own. A term in words only, with no field that code can check, is on the line "Terms not restated, untyped". A `MUST` or `MUST_NOT` term on that line is held. A `SHOULD` or `MAY` term on that line is listed, and it is not held.
 
 Set `baseline_minutes` to your time for a manual check of one run. Then the flag also shows that time when no person must look at the run. Give `baseline_minutes` to `report`, or `--baseline-minutes` to `as-agreed`.
 
@@ -115,13 +118,18 @@ The plugin adds a skill and a hook. The skill tells the agent to write the agree
 
 The hook runs before each tool call. It checks only the calls in `.as-agreed/binding.json`. It stops a call if a term changed, or if a must term is missing. It also stops a file tool that changes the record after you write your name. Each checked call writes one line to `.as-agreed/hook.jsonl`, without the values of the call. The hook uses `python3`, version 3.9 or higher. It uses the `src/` folder of the plugin, and it does not use the network.
 
-Run the hook on the example, with no agent:
+Run the hook on the example, with no agent. The package has the example:
 
 ```
-CLAUDE_PROJECT_DIR=examples/plugin-hold PYTHONPATH=src python3 -m as_agreed hook < examples/plugin-hold/events/dropped.json
+pip install as-agreed
+as-agreed example plugin-hold run
+cd run
+CLAUDE_PROJECT_DIR=$PWD as-agreed hook < events/dropped.json
 ```
 
-The output stops the call, because the field `limit.amount` is `DROPPED`. The file `events/faithful.json` passes.
+The output stops the call, because the field `limit.amount` is `DROPPED`. The file `events/faithful.json` passes. The command `as-agreed example` writes only into a new or empty folder.
+
+An agent can start in a throwaway folder, for example a task folder, a CI job or a cloud workdir. That folder has no `.as-agreed/`. Then set `AS_AGREED_RECORD` to the folder that holds `record.json` and `binding.json`. Or put a file `.as-agreed-record` in the start folder or a parent folder. Its one line is the path of that folder. If the folder that you name is missing or cannot be read, the hook stops the call.
 
 ## Read your traces
 
@@ -148,7 +156,7 @@ python3 ledger.py run examples/planted-failure --against-all --only hedged,not_f
 
 ## Its limits
 
-It compares only the fields that you declare, and it does not read a field from text. A declared value in English number words counts as its number, so "three" is 3. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` only in the folder where Claude Code starts. The band keeps the values of each checked call in `.as-agreed/runs/` on this machine, until you delete that folder.
+It compares only the fields that you declare, and it does not read a field from text. A declared value in English number words counts as its number, so "three" is 3. If a value is below an agreed minimum, the result is `WIDENED`. If a key such as `done` has `false` where `true` was agreed, the result is `WEAKENED`. The hook checks only the tool calls in the binding. It does not stop a change to `.as-agreed/` that a file tool does not make. It reads `.as-agreed/` in the folder where Claude Code starts, or the folder that `AS_AGREED_RECORD` or `.as-agreed-record` names. The hook checks each call alone, so it does not hold a term that an earlier call lost. The band keeps the values of each checked call in `.as-agreed/runs/` on this machine, until you delete that folder.
 
 ## Where this goes
 

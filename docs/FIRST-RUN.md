@@ -1,15 +1,11 @@
 # First run: see the band and open the Board
 
-This page has four steps. They start from the source and end on the Board.
+This page has four steps. They start from the package and end on the Board.
 
-The example of step 2 is in the source only. Use the source.
-
-## 1. Get the code
+## 1. Install the package
 
 ```
-git clone https://github.com/as-agreed/as-agreed
-cd as-agreed
-export PYTHONPATH=$PWD/src
+pip install as-agreed
 ```
 
 You must have Python 3.9 or higher. You do not use an account. The code does not use the network.
@@ -17,18 +13,17 @@ You must have Python 3.9 or higher. You do not use an account. The code does not
 ## 2. Run the example
 
 ```
-RUN=$(mktemp -d)/run
-cp -R examples/plugin-hold "$RUN"
-cd "$RUN"
-CLAUDE_PROJECT_DIR=$PWD python3 -m as_agreed hook < events/dropped.json
+as-agreed example plugin-hold run
+cd run
+CLAUDE_PROJECT_DIR=$PWD as-agreed hook < events/dropped.json
 ```
 
-The example is an invented order: "Pay the October invoice, up to 18,400 dollars." The call has no `amount`. The hook stops it.
+The first command copies the example into a new folder, `run`. The example is an invented order: "Pay the October invoice, up to 18,400 dollars." The call has no `amount`. The hook stops it.
 
 ## 3. See the band
 
 ```
-python3 -m as_agreed band .as-agreed/runs/example/ledger.jsonl
+as-agreed band .as-agreed/runs/example/ledger.jsonl
 ```
 
 The output is JSON. It starts with the labels of the band:
@@ -61,3 +56,7 @@ Claude Code 2.1.290 or later shows the band in the terminal and in the desktop a
 ## Limits
 
 The band counts only the calls that `.as-agreed/binding.json` names. The page keeps the values of each checked call in `.as-agreed/runs/` until you delete that folder.
+
+## From the source
+
+The example is also in the source, in `examples/plugin-hold`. Clone the repository and set `PYTHONPATH` to its `src` folder. Then use `python3 -m as_agreed` in place of `as-agreed`.

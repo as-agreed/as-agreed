@@ -1,6 +1,6 @@
 {
   "name": "as-agreed",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Checks a declared step's tool call against the agreed record a person confirmed, and stops the call when a binding term is missing or changed. Code only, no model, no network connection.",
   "author": {
     "name": "BizBuilder, Inc.",
