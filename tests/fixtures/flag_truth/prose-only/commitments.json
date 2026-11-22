@@ -1,0 +1,18 @@
+{
+ "commitments": [
+  {
+   "commitment_id": "prose_1",
+   "act": "Label every tray with its allergens",
+   "obligor": "the-caterer",
+   "obligee": "the-host",
+   "modality": "MUST"
+  }
+ ],
+ "proxy": true,
+ "drafter": {
+  "model": "code",
+  "version": "fixture-1",
+  "date": "2026-11-22",
+  "prompt_id": "none"
+ }
+}

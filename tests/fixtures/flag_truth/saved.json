@@ -1,0 +1,33 @@
+{
+ "order": "Order cater-7: a catered lunch (invented). Guests: at most 120.",
+ "commitment": {
+  "commitment_id": "guests",
+  "act": "Guests",
+  "obligor": "the-caterer",
+  "obligee": "the-host",
+  "modality": "MUST",
+  "limit": {
+   "guests": {
+    "max": 120
+   }
+  },
+  "carried_by": {
+   "limit.guests": "guests"
+  }
+ },
+ "kitchen": {
+  "first": {
+   "note": "guests not carried"
+  },
+  "retry": {
+   "guests": {
+    "max": 120
+   }
+  }
+ },
+ "handover": {
+  "guests": {
+   "max": 120
+  }
+ }
+}
