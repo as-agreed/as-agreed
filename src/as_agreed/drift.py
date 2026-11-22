@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Set
 from . import ledger
 from .commitment import (BOUND_KINDS, ID_SHAPE, MAX_INT_BITS, MODALITIES, VERIFICATIONS, Commitment, Criterion,
                          bound_kind, number, parse_date)
+from .quantity import from_words
 from .serialise import digest, short, to_jsonable
 
 PRESERVED = "PRESERVED"
@@ -101,17 +102,30 @@ def _text_equal(a: Any, b: Any) -> bool:
 
 
 def _equal(a: Any, b: Any) -> bool:
-    """Numbers numerically, but only where both sides are really numbers; everything else as strict text.
+    """The agreed value `a` against the declared value `b`: numbers numerically, but only where both sides are really
+    numbers; everything else as strict text.
 
     A string that looks like a number is text: an account, a purchase order or an invoice reference is an identifier,
     not a quantity, and comparing it as a float would make two different accounts equal. A quantity declared as a
     number still matches the same quantity written as text, because `str(4471)` and `"4471"` are the same string.
+    Where the agreed side is a number, a declared value written wholly in number words is that number: "three" is 3.
     """
     if isinstance(a, bool) or isinstance(b, bool):
         return a is b
     if _is_number(a) and _is_number(b):
         return _same_number(a, b)
+    if _is_number(a):
+        said = from_words(b)
+        if said is not None:
+            return _same_number(a, said)
     return _text_equal(a, b)
+
+
+def _declared_number(value: Any) -> Optional[Any]:
+    """A declared value against a numeric bound: a number as `number()` reads it, else a value wholly in number
+    words as its number ("three hundred" is 300), else None."""
+    n = number(value)
+    return n if n is not None else from_words(value)
 
 
 def _same_number(a: Any, b: Any) -> bool:
@@ -279,27 +293,38 @@ def condition_prose(agreed: str, value: Any) -> Finding:
     return escalate("condition", "a prose condition differs; tier 2 decides", agreed, value)
 
 
-def _member(value: Any) -> str:
+def _member(value: Any, agreed: Optional[Set[str]] = None) -> str:
     """One member of a set, as the token two sides are compared by.
 
     A number is canonical, so 100, 100.0, `Decimal("100.00")` and the string "100.00" that `to_jsonable` writes for a
     Decimal are one member, and a payload that arrives from `json.load` as a float still matches. Only a plain
     decimal spelling counts as a number, so a padded account or SKU string such as "0012" stays a string and is
     never folded together with "12". Two numbers are then compared exactly, so two distinct references stay apart.
+
+    A declared member, given the agreed set's members, is read as its number where it is written wholly in number
+    words and the agreed set holds that number: "twelve" is 12 against [12, 15]. Against a set of words it stays
+    its words, so "one" still matches an agreed "one".
     """
     token = _canonical_number(value)
-    return token if token is not None else strict(value)
+    if token is not None:
+        return token
+    if agreed is not None:
+        said = from_words(value)
+        if said is not None and str(said) in agreed:
+            return str(said)
+    return strict(value)
 
 
-def _values(raw: Any) -> Set[str]:
+def _values(raw: Any, agreed: Optional[Set[str]] = None) -> Set[str]:
     """A set's members: an allowlist of addresses, territories or data classes keeps every character that tells two
-    of them apart."""
+    of them apart. `agreed` is given for a declared set, so its members in number words meet the agreed numbers."""
     items: Iterable[Any] = raw if isinstance(raw, (list, tuple, set, frozenset)) else [raw]
-    return {_member(x) for x in items}
+    return {_member(x, agreed) for x in items}
 
 
 def _comparable(shape: str, a: Any, b: Any) -> Optional[tuple]:
-    pa, pb = (number(a), number(b)) if shape == "number" else (parse_date(a), parse_date(b))
+    """The agreed bound `a` and the declared `b` as two numbers or two dates, or None."""
+    pa, pb = (number(a), _declared_number(b)) if shape == "number" else (parse_date(a), parse_date(b))
     return None if pa is None or pb is None else (pa, pb)
 
 
@@ -385,8 +410,9 @@ UNITS.update(_units("time", "s", {
 
 
 def _exact(value: Any) -> Optional[Fraction]:
-    """A number as an exact fraction: an int as itself, a float by its shortest decimal spelling, a string by number()."""
-    n = number(value)
+    """A declared number as an exact fraction: an int as itself, a float by its shortest decimal spelling, a string by
+    number() or as number words."""
+    n = _declared_number(value)
     if n is None:
         return None
     return Fraction(n) if isinstance(n, int) else Fraction(repr(n))
@@ -445,7 +471,8 @@ def _other_unit(field: str, kind: str, shape: str, bound: Mapping, value: Mappin
 def _bound_against_bound(field: str, kind: str, shape: str, bound: Mapping, value: Mapping) -> Finding:
     was, now = describe(bound), describe(value)
     if shape == "set":
-        a, b = _values(bound[kind]), _values(value[kind])
+        a = _values(bound[kind])
+        b = _values(value[kind], a)
         grew, shrank = b - a, a - b
         if kind == "not_in":
             grew, shrank = shrank, grew  # fewer exclusions is a wider scope
@@ -468,7 +495,8 @@ def _value_against_bound(field: str, kind: str, shape: str, bound: Mapping, agre
     """A delivered value inside the bound conforms; a value outside it is an enlargement nobody agreed to."""
     was = describe(bound)
     if shape == "set":
-        a, v = _values(agreed), _values(value)
+        a = _values(agreed)
+        v = _values(value, a)
         outside = v - a if kind == "in" else v & a
         if outside:
             return Finding(field, WIDENED, f"{', '.join(sorted(outside))} where {was} was agreed", bound, value)

@@ -1,0 +1,128 @@
+{
+ "p01": {
+  "kind": "faithful",
+  "class": "timeline",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p03": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p04": {
+  "kind": "faithful",
+  "class": "publish",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p06": {
+  "kind": "faithful",
+  "class": "timeline",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p09": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p11": {
+  "kind": "faithful",
+  "class": "label",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p12": {
+  "kind": "faithful",
+  "class": "timeline",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p13": {
+  "kind": "drift",
+  "class": "figure_words",
+  "drift": "body says 'well over three hundred commitments' in words; agreed figure is 271",
+  "subtle": true
+ },
+ "p14": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p17": {
+  "kind": "faithful",
+  "class": "timeline",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p19": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p20": {
+  "kind": "faithful",
+  "class": "label",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p22": {
+  "kind": "faithful",
+  "class": "timeline",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p24": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p27": {
+  "kind": "faithful",
+  "class": "timeline",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p29": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p30": {
+  "kind": "faithful",
+  "class": "timeline",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p32": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p35": {
+  "kind": "faithful",
+  "class": "timeline",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p37": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ },
+ "p39": {
+  "kind": "faithful",
+  "class": "draft",
+  "drift": "as agreed",
+  "subtle": false
+ }
+}
