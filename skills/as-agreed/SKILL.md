@@ -1,7 +1,7 @@
 ---
 name: as-agreed
 description: >
-  Use this skill when a person gives you an order with must terms, for example a limit or a date.
+  Use this skill when a person gives you an order with must terms. For example, the order sets a limit or a date.
   Use it before your tool call does the work, for example a payment.
   The skill records what was agreed. Then the As-Agreed hook checks each step against that record.
 ---
