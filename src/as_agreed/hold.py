@@ -244,11 +244,17 @@ def _declared(r: Mapping[str, Any]) -> bool:
     return bool(r.get("drift_class")) or r.get("undecided") not in (None, UNDECLARED)
 
 
+def _step_of(link: Any) -> str:
+    """The step and invocation of a link id `name#invocation@attempt`; a link with no attempt stands for itself."""
+    s = str(link)
+    return s.rpartition("@")[0] or s
+
+
 def tally(rows: Iterable[Mapping[str, Any]]) -> Tally:
     """Counted over the typed fields of the binding commitments (MUST, MUST_NOT): every field but obligor, obligee, act
     and modality, and those four where some link declared them. Each term stands at its last link in the run (within a
     link, its worst verdict), unless a link that no hold stopped changed or lost it before: that loss stands, even when
-    a later link restores the term. Kept (PRESERVED or RESTATED), held (changed or lost, and a hold stopped the run at
+    a later link restores the term. Kept (PRESERVED or RESTATED), held (changed or lost, and a step that ended held, at
     or after that link), changed and not held, unchecked (code could not decide). A term counts as kept because of the
     check when a hold stopped it at one link and it was kept at a later link that passed its hold.
 
@@ -258,8 +264,11 @@ def tally(rows: Iterable[Mapping[str, Any]]) -> Tally:
     holds_ = _gate_holds(rows)
     stopped = {h.get("link") for h in holds_ if not h.get("passed")}
     passed = {h.get("link") for h in holds_ if h.get("passed")}
-    last_stop = max((i for i, r in enumerate(rows) if r.get("kind") == "hold" and not r.get("passed")
-                     and (r.get("policy") or {}).get("on_loss") == "hold"), default=-1)
+    # a step that ended held: its last gate hold did not pass (a hold its retry passed stopped nothing for good)
+    gates = [(i, _step_of(r.get("link")), bool(r.get("passed"))) for i, r in enumerate(rows)
+             if r.get("kind") == "hold" and (r.get("policy") or {}).get("on_loss") == "hold"]
+    ended = {step: ok for _, step, ok in gates}
+    last_stop = max((i for i, step, ok in gates if not ok and not ended[step]), default=-1)
     commitments = {r.get("commitment_id"): r for r in rows if r.get("kind") == "commitment"}
     verdicts = [(i, r) for i, r in enumerate(rows) if r.get("kind") == "verdict" and r.get("unit_kind") == "commitment"]
     declared = {(r.get("unit"), r.get("field")) for _, r in verdicts if _declared(r)}

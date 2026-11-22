@@ -91,6 +91,27 @@ class MiddleHopLoss(unittest.TestCase):
             lines = ab.report(agreed, out, quiet=True).flag_lines
         self.assertIn("1 held (guests limit.guests DROPPED", lines[0])
 
+    def test_a_hold_its_retry_passed_does_not_make_an_earlier_loss_held(self):
+        # the Security reviewer's probe P1 (orders/ASAG-50/security.md, F1): the kitchen only records the loss of
+        # guests; the driver holds once on the budget and its retry passes; no commit follows, so nothing stopped
+        # guests, and the flag must not call it held
+        terms = [dict(commitment_id="guests", act="Guests", obligor="the-caterer", obligee="the-host", modality="MUST",
+                      limit={"guests": {"max": 120}}, carried_by={"limit.guests": "guests"}),
+                 dict(commitment_id="budget", act="Budget", obligor="the-caterer", obligee="the-host", modality="MUST",
+                      limit={"amount": {"max": 5000, "unit": "USD"}}, carried_by={"limit.amount": "amount"})]
+        ok = {"guests": {"max": 120}, "amount": {"max": 5000, "unit": "USD"}}
+        agreed = ab.register("Order cater-8 (invented). Guests: at most 120. Budget: at most 5000 USD.",
+                             [ab.Commitment(**t) for t in terms], adapter=ab.memory_adapter(), source="order.md")
+        kitchen = ab.step("kitchen", agreed)(lambda text, reason=None: {"amount": {"max": 5000, "unit": "USD"}})
+        driver = ab.step("driver", agreed, on_loss="hold", retries=1)(
+            lambda text, reason=None: ok if reason else {"guests": {"max": 120}, "amount": {"max": 9000, "unit": "USD"}})
+        kitchen("Cook it.")
+        driver("Drive it.")
+        with tempfile.TemporaryDirectory() as out:
+            rep = ab.report(agreed, out, quiet=True)
+        self.assertEqual(rep.code, 0, rep.gate_line)
+        self.assertIn("0 held; 1 changed and not held (guests limit.guests DROPPED", rep.flag_lines[0])
+
     def test_a_loss_stopped_by_a_hold_and_kept_later_is_still_saved(self):
         s = json.loads((FIX / "saved.json").read_text(encoding="utf-8"))
         agreed = ab.register(s["order"], [ab.Commitment(**s["commitment"])], adapter=ab.memory_adapter(),
