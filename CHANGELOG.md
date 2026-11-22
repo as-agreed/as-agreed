@@ -8,7 +8,7 @@
 - A term in words only, with no field that code can check, is on the line "Terms not restated, untyped". A `MUST` or `MUST_NOT` term on that line is held, as before. A `SHOULD` or `MAY` term on that line is listed, and it is not held.
 - The hook finds the record when the agent starts in a throwaway folder. Examples are a task folder, a CI job or a cloud workdir. First it reads `.as-agreed/` in the start folder, as before. Then it reads `AS_AGREED_RECORD`, the path of a folder with `record.json` and `binding.json`. Then it reads a file `.as-agreed-record` in the start folder or a parent folder. The one line of that file is the path of the folder.
 - The hook stops the call if the folder that you name is missing or cannot be read. It also stops the call if that folder is not yours, or if others can write it. It does not read a `.as-agreed-record` file of a different user.
-- After you write your name in `confirmed_by`, a file tool cannot change `.as-agreed-record` or the folder that it names. The band writes its files in `runs/` next to the record that the hook found.
+- After you write your name in `confirmed_by`, a file tool cannot change `.as-agreed-record`. It also cannot change `record.json` and `binding.json` in the folder that it names. The band writes its files in `runs/` next to the record that the hook found.
 - The plugin starts the check only where it can find a record. If the check cannot start, the call does not run.
 - The hook checks each call alone. It does not hold a term that an earlier call lost.
 - The package has the example of the hook. `as-agreed example plugin-hold <folder>` copies it into a new or empty folder. Thus `docs/FIRST-RUN.md` starts with `pip install as-agreed`.
