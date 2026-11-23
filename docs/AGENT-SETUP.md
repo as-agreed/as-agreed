@@ -83,7 +83,7 @@ Then your agent gives you one row for each term: kept, held, unchecked, or not i
 | The Board | no | yes: one page for each task, on your machine | yes |
 | What the hook writes | `.as-agreed/hook.jsonl`: each decision, with no values | also `.as-agreed/runs/<session>/`: `ledger.jsonl`, `band.json` and `board.html`, with the values | as 0.1.1 |
 
-`python3 -m as_agreed --version` shows the version of the library. On 2026-11-22, PyPI has 0.1.0.
+`python3 -m as_agreed --version` shows the version of the library. The installs in steps 1 and 2 give you the band and the Board.
 
 ## Its limits
 
