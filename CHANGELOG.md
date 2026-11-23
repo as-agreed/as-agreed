@@ -14,7 +14,7 @@
 - The install line is `python3 -m pip install as-agreed`. If the shell does not find `as-agreed`, use `python3 -m as_agreed`.
 - `docs/AGENT-SETUP.md` gives the setup and the prompt for your own coding agent, in five steps.
 
-## 0.1.2, 2026-11-24
+## 0.1.2, 2026-11-23
 
 - The gate holds a binding term that a step changed or lost when no hold stopped it at that step. The term stays held also if a later step gives it back. Before, the flag kept only the last check of each field, so this loss passed.
 - A hold may stop a term at its own step. If a later step keeps the term, it still counts as kept because of the check.
