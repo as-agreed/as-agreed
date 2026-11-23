@@ -1,6 +1,6 @@
 # Changes
 
-## 0.1.3, 2026-11-25
+## 0.1.3, 2026-11-23
 
 - `as-agreed show` prints each term of the record with the person's words for it, from `said`. It marks a quote that is not in the order, and a value that differs from its words. It also marks a number or date with no words, and a hidden character. It marks a binding step that serves no term.
 - `as-agreed confirm` is the person's one step. It reads the name from their own terminal. It does not read a name from a pipe. It writes `confirmed_by`, `confirmed_at` and two hashes, of the record and of the binding.
